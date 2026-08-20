@@ -5,24 +5,26 @@ import "./globals.css";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
-  subsets: ["latin"],
+  subsets: ["latin-ext"],
 });
 
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
-  subsets: ["latin"],
+  subsets: ["latin-ext"],
 });
 
 export const metadata: Metadata = {
   title: "Wordle Multiplayer",
   description:
-    "A multiplayer Wordle game in Portuguese - guess words, compete with friends, climb the leaderboard",
-  keywords: ["wordle", "word-game", "portuguese", "multiplayer"],
+    "Jogo multiplayer de palavras em português - adivinhe palavras, compete com amigos e suba no ranking global",
+  keywords: ["wordle", "jogo-de-palavras", "português", "multiplayer", "palavras"],
   openGraph: {
     title: "Wordle Multiplayer",
-    description: "Guess words and compete with friends",
+    description: "Adivinhe palavras e compete com amigos",
     type: "website",
   },
+  authors: [{ name: "Wordle" }],
+  applicationName: "Wordle Multiplayer",
 };
 
 type RootLayoutProps = {

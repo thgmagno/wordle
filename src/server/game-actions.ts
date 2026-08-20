@@ -32,16 +32,16 @@ export async function submitAttempt(
     });
 
     if (!round) {
-      return { success: false, error: "Round not found" };
+      return { success: false, error: "Rodada não encontrada" };
     }
 
     if (round.status !== "ACTIVE") {
-      return { success: false, error: "Round is not active" };
+      return { success: false, error: "A rodada não está ativa" };
     }
 
     // Verify user is not the word owner (spectator)
     if (round.wordOwnerId === userId) {
-      return { success: false, error: "You cannot participate in this round (spectator mode)" };
+      return { success: false, error: "Você não pode participar desta rodada (modo espectador)" };
     }
 
     // Validate word
@@ -65,7 +65,7 @@ export async function submitAttempt(
     );
 
     if (normalizedPrevious.includes(normalizedWord)) {
-      return { success: false, error: "You already tried this word" };
+      return { success: false, error: "Você já tentou esta palavra" };
     }
 
     // Evaluate attempt
@@ -153,7 +153,7 @@ export async function submitAttempt(
     };
   } catch (error) {
     console.error("Error submitting attempt:", error);
-    return { success: false, error: "Failed to submit attempt" };
+    return { success: false, error: "Falha ao enviar tentativa" };
   }
 }
 
@@ -281,7 +281,7 @@ export async function advanceToNextRound(gameId: string, hostUserId: string): Pr
     });
 
     if (!game) {
-      return { success: false, error: "Game not found" };
+      return { success: false, error: "Jogo não encontrado" };
     }
 
     if (game.room.hostId !== hostUserId) {
@@ -363,6 +363,6 @@ export async function advanceToNextRound(gameId: string, hostUserId: string): Pr
     return { success: true, nextRoundId: newRound.id };
   } catch (error) {
     console.error("Error advancing to next round:", error);
-    return { success: false, error: "Failed to advance round" };
+    return { success: false, error: "Falha ao avançar rodada" };
   }
 }
