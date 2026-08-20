@@ -1,4 +1,10 @@
-import { evaluateAttempt, isAttemptCorrect } from "@/lib/wordle-evaluation";
+import {
+  evaluateAttempt,
+  isAttemptCorrect,
+  isPlayerDoneWithRound,
+  haveAllPlayersFinishedRound,
+  MAX_ATTEMPTS,
+} from "@/lib/wordle-evaluation";
 import type { AttemptLetterResult } from "@/types";
 
 describe("Wordle Evaluation", () => {
@@ -97,6 +103,65 @@ describe("Wordle Evaluation", () => {
       const result = evaluateAttempt("açúcar", "acucar");
       expect(result).toBeDefined();
       expect(result.length).toBe(6);
+    });
+  });
+
+  // Regression coverage for the round-completion fix (issue #14): a round
+  // used to end for everyone the instant the first player guessed
+  // correctly, cutting off anyone still on their own attempts. These
+  // predicates are what submitAttempt now uses to decide, per player and
+  // for the round as a whole, whether it's actually over.
+  describe("isPlayerDoneWithRound", () => {
+    it("is false with no attempts yet", () => {
+      expect(isPlayerDoneWithRound([])).toBe(false);
+    });
+
+    it("is false with some incorrect attempts under the cap", () => {
+      const attempts = Array.from({ length: MAX_ATTEMPTS - 1 }, () => ({ isCorrect: false }));
+      expect(isPlayerDoneWithRound(attempts)).toBe(false);
+    });
+
+    it("is true as soon as one attempt is correct, even with attempts left", () => {
+      expect(isPlayerDoneWithRound([{ isCorrect: false }, { isCorrect: true }])).toBe(true);
+    });
+
+    it("is true once every attempt has been used, win or not", () => {
+      const attempts = Array.from({ length: MAX_ATTEMPTS }, () => ({ isCorrect: false }));
+      expect(isPlayerDoneWithRound(attempts)).toBe(true);
+    });
+  });
+
+  describe("haveAllPlayersFinishedRound", () => {
+    it("is false when a player has no attempts recorded yet", () => {
+      const attemptsByPlayer = new Map([["p1", [{ isCorrect: true }]]]);
+      expect(haveAllPlayersFinishedRound(["p1", "p2"], attemptsByPlayer)).toBe(false);
+    });
+
+    it("is false while any active player is still mid-round", () => {
+      const attemptsByPlayer = new Map([
+        ["p1", [{ isCorrect: true }]],
+        ["p2", [{ isCorrect: false }]],
+      ]);
+      expect(haveAllPlayersFinishedRound(["p1", "p2"], attemptsByPlayer)).toBe(false);
+    });
+
+    it("is true once every active player has either won or used all attempts", () => {
+      const attemptsByPlayer = new Map([
+        ["p1", [{ isCorrect: true }]],
+        ["p2", Array.from({ length: MAX_ATTEMPTS }, () => ({ isCorrect: false }))],
+      ]);
+      expect(haveAllPlayersFinishedRound(["p1", "p2"], attemptsByPlayer)).toBe(true);
+    });
+
+    it("ignores players not in the active list (e.g. the round's spectator)", () => {
+      const attemptsByPlayer = new Map([["p1", [{ isCorrect: true }]]]);
+      // p2 isn't an active player for this round (they're the word owner),
+      // so their absence from attemptsByPlayer must not block completion.
+      expect(haveAllPlayersFinishedRound(["p1"], attemptsByPlayer)).toBe(true);
+    });
+
+    it("is true with no active players (edge case: only the spectator remains)", () => {
+      expect(haveAllPlayersFinishedRound([], new Map())).toBe(true);
     });
   });
 });

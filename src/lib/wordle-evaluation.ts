@@ -12,6 +12,37 @@ import {
 export const MAX_ATTEMPTS = 6;
 
 /**
+ * A player has finished their part of a round once they've either solved
+ * it or used every attempt they're allowed. Pure predicate over just
+ * their own attempts, so it's usable both server-side (deciding whether a
+ * new attempt from them is still allowed, and whether the round as a
+ * whole can finish) and in tests without touching the database.
+ */
+export function isPlayerDoneWithRound(
+  playerAttempts: Array<{ isCorrect: boolean }>
+): boolean {
+  return (
+    playerAttempts.some((a) => a.isCorrect) ||
+    playerAttempts.length >= MAX_ATTEMPTS
+  );
+}
+
+/**
+ * A round is over for everyone once every active, non-spectator player has
+ * finished it (see isPlayerDoneWithRound) — a player with zero attempts
+ * yet is not done. `attemptsByPlayer` need not have an entry for every id
+ * in `activePlayerIds`; a missing entry is treated as "no attempts yet".
+ */
+export function haveAllPlayersFinishedRound(
+  activePlayerIds: string[],
+  attemptsByPlayer: Map<string, Array<{ isCorrect: boolean }>>
+): boolean {
+  return activePlayerIds.every((id) =>
+    isPlayerDoneWithRound(attemptsByPlayer.get(id) ?? [])
+  );
+}
+
+/**
  * Evaluates a Wordle attempt against the answer word
  * Correctly handles repeated letters according to Wordle rules
  */
