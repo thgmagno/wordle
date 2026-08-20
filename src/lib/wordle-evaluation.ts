@@ -17,7 +17,7 @@ export function evaluateAttempt(
 
   if (normalizedAttempt.length !== normalizedAnswer.length) {
     throw new Error(
-      `Attempt and answer must have the same length. Attempt: ${normalizedAttempt.length}, Answer: ${normalizedAnswer.length}`
+      `A tentativa e a resposta devem ter o mesmo comprimento. Tentativa: ${normalizedAttempt.length}, Resposta: ${normalizedAnswer.length}`
     );
   }
 
@@ -116,21 +116,21 @@ export function canUseAsAnswerWord(
   if (normalizedWord.length !== options.expectedLength) {
     return {
       valid: false,
-      error: `Word must have exactly ${options.expectedLength} letters`,
+      error: `A palavra deve ter exatamente ${options.expectedLength} letras`,
     };
   }
 
   if (!options.isInDictionary) {
     return {
       valid: false,
-      error: "Word is not in the dictionary",
+      error: "A palavra não está no dicionário",
     };
   }
 
   if (options.isNegative) {
     return {
       valid: false,
-      error: "Word cannot be used (blocked word)",
+      error: "Esta palavra não pode ser usada (palavra bloqueada)",
     };
   }
 
@@ -154,21 +154,21 @@ export function canUseAsAttemptWord(
   if (normalizedWord.length !== options.expectedLength) {
     return {
       valid: false,
-      error: `Word must have exactly ${options.expectedLength} letters`,
+      error: `A palavra deve ter exatamente ${options.expectedLength} letras`,
     };
   }
 
   if (!options.isInDictionary) {
     return {
       valid: false,
-      error: "Word is not in the dictionary",
+      error: "A palavra não está no dicionário",
     };
   }
 
   if (options.isNegative) {
     return {
       valid: false,
-      error: "Word cannot be used (blocked word)",
+      error: "Esta palavra não pode ser usada (palavra bloqueada)",
     };
   }
 
@@ -177,7 +177,7 @@ export function canUseAsAttemptWord(
     if (previousNormalized.includes(normalizedWord)) {
       return {
         valid: false,
-        error: "You already tried this word",
+        error: "Você já tentou esta palavra",
       };
     }
   }

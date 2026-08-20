@@ -44,15 +44,15 @@ export async function isWordValid(
   const dbWord = await getWordByNormalized(validation.normalized!);
 
   if (!dbWord) {
-    return { valid: false, reason: "Word not found in dictionary" };
+    return { valid: false, reason: "Palavra não encontrada no dicionário" };
   }
 
   if (!dbWord.isValid) {
-    return { valid: false, reason: "Word is marked as invalid" };
+    return { valid: false, reason: "A palavra foi marcada como inválida" };
   }
 
   if (dbWord.isNegative && !allowNegative) {
-    return { valid: false, reason: "Word is blocked" };
+    return { valid: false, reason: "A palavra está bloqueada" };
   }
 
   return { valid: true };
@@ -84,7 +84,7 @@ export async function getRandomWords(
 export async function getWordsByLength(length: number, limit: number = 100) {
   const validLengths = [4, 5, 6];
   if (!validLengths.includes(length)) {
-    throw new Error(`Invalid word length: ${length}. Must be 4, 5, or 6.`);
+    throw new Error(`Tamanho de palavra inválido: ${length}. Deve ser 4, 5 ou 6.`);
   }
 
   return prisma.word.findMany({
@@ -169,22 +169,22 @@ export async function validateAnswerWord(
   if (validation.normalized && validation.normalized.length !== expectedLength) {
     return {
       valid: false,
-      error: `Word must have exactly ${expectedLength} letters`,
+      error: `A palavra deve ter exatamente ${expectedLength} letras`,
     };
   }
 
   const dbWord = await getWordByNormalized(validation.normalized!);
 
   if (!dbWord) {
-    return { valid: false, error: "Word not found in dictionary" };
+    return { valid: false, error: "Palavra não encontrada no dicionário" };
   }
 
   if (!dbWord.isValid) {
-    return { valid: false, error: "Word is marked as invalid" };
+    return { valid: false, error: "A palavra foi marcada como inválida" };
   }
 
   if (dbWord.isNegative) {
-    return { valid: false, error: "Word is blocked" };
+    return { valid: false, error: "A palavra está bloqueada" };
   }
 
   return { valid: true, wordId: dbWord.id };
@@ -205,18 +205,18 @@ export async function validateAttemptWord(
   if (validation.normalized && validation.normalized.length !== expectedLength) {
     return {
       valid: false,
-      error: `Word must have exactly ${expectedLength} letters`,
+      error: `A palavra deve ter exatamente ${expectedLength} letras`,
     };
   }
 
   const dbWord = await getWordByNormalized(validation.normalized!);
 
   if (!dbWord) {
-    return { valid: false, error: "Word not found in dictionary" };
+    return { valid: false, error: "Palavra não encontrada no dicionário" };
   }
 
   if (dbWord.isNegative) {
-    return { valid: false, error: "Word is blocked" };
+    return { valid: false, error: "A palavra está bloqueada" };
   }
 
   return { valid: true };

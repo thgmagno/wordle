@@ -213,7 +213,7 @@ export async function updateLeaderboardVisibility(
     return { success: true };
   } catch (error) {
     console.error("Error updating leaderboard visibility:", error);
-    return { success: false, error: "Failed to update leaderboard visibility" };
+    return { success: false, error: "Falha ao atualizar visibilidade do ranking" };
   }
 }
 
@@ -235,7 +235,7 @@ export async function finalizeGameStatistics(
     });
 
     if (matchScores.length === 0) {
-      return { success: false, error: "No scores found for game" };
+      return { success: false, error: "Nenhuma pontuação encontrada para este jogo" };
     }
 
     // Update user statistics
@@ -279,6 +279,6 @@ export async function finalizeGameStatistics(
     return { success: true };
   } catch (error) {
     console.error("Error finalizing game statistics:", error);
-    return { success: false, error: "Failed to finalize statistics" };
+    return { success: false, error: "Falha ao finalizar estatísticas" };
   }
 }

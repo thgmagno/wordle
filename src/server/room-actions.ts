@@ -12,11 +12,11 @@ export async function createRoom(
 ): Promise<{ success: boolean; roomId?: string; error?: string }> {
   try {
     if (!hostId) {
-      return { success: false, error: "Host ID is required" };
+      return { success: false, error: "ID do anfitrião é obrigatório" };
     }
 
     if (![4, 5, 6].includes(wordLength)) {
-      return { success: false, error: "Word length must be 4, 5, or 6" };
+      return { success: false, error: "O comprimento da palavra deve ser 4, 5 ou 6" };
     }
 
     // Create room
@@ -42,7 +42,7 @@ export async function createRoom(
     return { success: true, roomId: room.id };
   } catch (error) {
     console.error("Error creating room:", error);
-    return { success: false, error: "Failed to create room" };
+    return { success: false, error: "Falha ao criar sala" };
   }
 }
 
@@ -65,15 +65,15 @@ export async function joinRoom(
     });
 
     if (!room) {
-      return { success: false, error: "Room not found" };
+      return { success: false, error: "Sala não encontrada" };
     }
 
     if (room.status !== "LOBBY") {
-      return { success: false, error: "Room is not accepting new players" };
+      return { success: false, error: "A sala não está aceitando novos jogadores" };
     }
 
     if (room.participants.length >= room.maxPlayers) {
-      return { success: false, error: "Room is full" };
+      return { success: false, error: "A sala está cheia" };
     }
 
     // Check if user is already in room
@@ -111,7 +111,7 @@ export async function joinRoom(
     return { success: true };
   } catch (error) {
     console.error("Error joining room:", error);
-    return { success: false, error: "Failed to join room" };
+    return { success: false, error: "Falha ao entrar na sala" };
   }
 }
 
@@ -134,7 +134,7 @@ export async function leaveRoom(
     });
 
     if (!participant) {
-      return { success: false, error: "User not in room" };
+      return { success: false, error: "Usuário não está na sala" };
     }
 
     // Update participant status
@@ -168,7 +168,7 @@ export async function leaveRoom(
     return { success: true };
   } catch (error) {
     console.error("Error leaving room:", error);
-    return { success: false, error: "Failed to leave room" };
+    return { success: false, error: "Falha ao sair da sala" };
   }
 }
 
@@ -243,7 +243,7 @@ export async function submitWord(
     });
 
     if (existing) {
-      return { success: false, error: "You have already submitted a word for this room" };
+      return { success: false, error: "Você já enviou uma palavra para esta sala" };
     }
 
     // Create submitted word record
@@ -260,7 +260,7 @@ export async function submitWord(
     return { success: true };
   } catch (error) {
     console.error("Error submitting word:", error);
-    return { success: false, error: "Failed to submit word" };
+    return { success: false, error: "Falha ao enviar palavra" };
   }
 }
 
@@ -283,15 +283,15 @@ export async function startGame(
     });
 
     if (!room) {
-      return { success: false, error: "Room not found" };
+      return { success: false, error: "Sala não encontrada" };
     }
 
     if (room.hostId !== userId) {
-      return { success: false, error: "Only the host can start the game" };
+      return { success: false, error: "Apenas o anfitrião pode iniciar o jogo" };
     }
 
     if (room.status !== "LOBBY") {
-      return { success: false, error: "Game has already been started" };
+      return { success: false, error: "O jogo já foi iniciado" };
     }
 
     // Check if all participants have submitted words
@@ -306,7 +306,7 @@ export async function startGame(
     }
 
     if (participantCount < 2) {
-      return { success: false, error: "At least 2 participants are required" };
+      return { success: false, error: "Pelo menos 2 participantes são necessários" };
     }
 
     // Create game
@@ -332,6 +332,6 @@ export async function startGame(
     return { success: true, gameId: game.id };
   } catch (error) {
     console.error("Error starting game:", error);
-    return { success: false, error: "Failed to start game" };
+    return { success: false, error: "Falha ao iniciar o jogo" };
   }
 }

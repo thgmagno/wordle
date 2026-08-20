@@ -58,15 +58,15 @@ export function validateWordFormat(word: string): { valid: boolean; error?: stri
   const trimmed = word.trim();
 
   if (!trimmed) {
-    return { valid: false, error: "Word cannot be empty" };
+    return { valid: false, error: "A palavra não pode estar vazia" };
   }
 
   if (!isValidPortugueseWord(trimmed)) {
-    return { valid: false, error: "Word contains invalid characters" };
+    return { valid: false, error: "A palavra contém caracteres inválidos" };
   }
 
   if (!isValidWordLength(trimmed)) {
-    return { valid: false, error: `Word must have 4, 5, or 6 letters. Current: ${trimmed.length}` };
+    return { valid: false, error: `A palavra deve ter 4, 5 ou 6 letras. Atual: ${trimmed.length}` };
   }
 
   return {
