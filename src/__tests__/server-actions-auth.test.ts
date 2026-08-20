@@ -26,6 +26,12 @@ import {
   advanceToNextRound,
 } from "@/server/game-actions";
 import { updateLeaderboardVisibility } from "@/server/ranking-actions";
+import {
+  startSinglePlayerGame,
+  submitSinglePlayerAttempt,
+  getSinglePlayerGameState,
+  getActiveSinglePlayerGame,
+} from "@/server/single-player-actions";
 
 const mockedAuth = auth as jest.MockedFunction<typeof auth>;
 const UNAUTHENTICATED_ERROR = "Você precisa estar autenticado";
@@ -90,6 +96,28 @@ describe("Server Actions reject unauthenticated callers", () => {
       success: false,
       error: UNAUTHENTICATED_ERROR,
     });
+  });
+
+  it("startSinglePlayerGame", async () => {
+    await expect(startSinglePlayerGame(5)).resolves.toEqual({
+      success: false,
+      error: UNAUTHENTICATED_ERROR,
+    });
+  });
+
+  it("submitSinglePlayerAttempt", async () => {
+    await expect(submitSinglePlayerAttempt("game-1", "gatos")).resolves.toEqual({
+      success: false,
+      error: UNAUTHENTICATED_ERROR,
+    });
+  });
+
+  it("getSinglePlayerGameState returns null", async () => {
+    await expect(getSinglePlayerGameState("game-1")).resolves.toBeNull();
+  });
+
+  it("getActiveSinglePlayerGame returns null", async () => {
+    await expect(getActiveSinglePlayerGame()).resolves.toBeNull();
   });
 
   // Read-only getters don't return a {success, error} shape — they just

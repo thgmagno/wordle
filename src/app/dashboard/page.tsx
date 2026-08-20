@@ -38,7 +38,21 @@ export default async function DashboardPage() {
           <h2 className="text-3xl font-bold mb-8">Painel de Controle</h2>
 
           {/* Actions Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-12">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-12">
+            {/* Single Player */}
+            <div className="card hover:shadow-lg transition-shadow">
+              <h3 className="text-xl font-semibold mb-2">Jogar Sozinho</h3>
+              <p className="text-slate-600 dark:text-slate-400 mb-6">
+                Jogue no seu ritmo, sem precisar de outros jogadores
+              </p>
+              <Link
+                href="/play"
+                className="btn-primary"
+              >
+                Modo Solo
+              </Link>
+            </div>
+
             {/* Create Room */}
             <div className="card hover:shadow-lg transition-shadow">
               <h3 className="text-xl font-semibold mb-2">Criar Sala</h3>

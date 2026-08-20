@@ -156,6 +156,14 @@ export const RATE_LIMIT_CONFIGS = {
     message: "Limite de criação de salas atingido. Tente novamente em 5 minutos.",
   } as RateLimitConfig,
 
+  // Início de partida solo — mais generoso que a criação de sala, já que
+  // jogar várias partidas seguidas é o uso normal do modo solo.
+  SINGLE_PLAYER_START: {
+    windowMs: 5 * 60 * 1000, // 5 minutos
+    maxRequests: 15,
+    message: "Muitas partidas iniciadas. Aguarde um pouco.",
+  } as RateLimitConfig,
+
   // Requisições gerais de API
   API_REQUEST: {
     windowMs: 60 * 1000, // 1 minuto

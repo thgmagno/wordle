@@ -22,10 +22,17 @@ export default function HomePage() {
         <div className="max-w-2xl">
           <h2 className="text-5xl font-bold mb-6">Bem-vindo ao Wordle</h2>
           <p className="text-xl text-slate-600 dark:text-slate-400 mb-8">
-            Um jogo multiplayer de palavras em português. Adivinhe palavras com amigos, compete globalmente e suba no ranking!
+            Um jogo de palavras em português. Jogue sozinho no seu ritmo ou desafie amigos em tempo real e suba no ranking!
           </p>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-12">
+            <div className="card">
+              <h3 className="text-lg font-semibold mb-2">Modo Solo</h3>
+              <p className="text-sm text-slate-600 dark:text-slate-400">
+                Jogue sozinho, sem pressa, quantas vezes quiser
+              </p>
+            </div>
+
             <div className="card">
               <h3 className="text-lg font-semibold mb-2">Multiplayer</h3>
               <p className="text-sm text-slate-600 dark:text-slate-400">
