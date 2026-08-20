@@ -1,6 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
+import { logger } from "@/lib/logger";
 import type { PaginatedResponse, UserStatistics } from "@/types";
 
 /**
@@ -210,9 +211,10 @@ export async function updateLeaderboardVisibility(
       data: { showInLeaderboard },
     });
 
+    logger.info("security", "Leaderboard visibility updated", { userId, showInLeaderboard }, userId);
     return { success: true };
   } catch (error) {
-    console.error("Error updating leaderboard visibility:", error);
+    logger.error("security", "Error updating leaderboard visibility", error as Error, { userId, showInLeaderboard }, userId);
     return { success: false, error: "Falha ao atualizar visibilidade do ranking" };
   }
 }
@@ -273,12 +275,27 @@ export async function finalizeGameStatistics(
             lastGamePlayedAt: new Date(),
           },
         });
+
+        logger.info(
+          "game",
+          "Estatísticas finalizadas para usuário",
+          {
+            gameId,
+            userId: score.userId,
+            placement,
+            score: score.finalScore,
+            totalGamesPlayed: newTotal,
+            totalPoints: newPoints,
+            totalWins: newWins,
+          },
+          score.userId
+        );
       }
     }
 
     return { success: true };
   } catch (error) {
-    console.error("Error finalizing game statistics:", error);
+    logger.error("game", "Erro ao finalizar estatísticas", error as Error, { gameId }, undefined);
     return { success: false, error: "Falha ao finalizar estatísticas" };
   }
 }
