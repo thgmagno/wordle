@@ -12,6 +12,12 @@ A production-ready multiplayer Wordle game in Brazilian Portuguese with real-tim
 - **Responsive Design**: Mobile-first interface with light/dark theme support
 - **Accessibility**: Keyboard support for both physical and virtual keyboards
 - **Security**: Server-side validation for all game-critical operations
+- **Error Tracking**: Sentry integration for production error monitoring
+- **Analytics**: Comprehensive event tracking for game metrics and user behavior
+- **Admin Dashboard**: Real-time metrics visualization with charts and statistics
+- **Rate Limiting**: Built-in request rate limiting for API protection
+- **Structured Logging**: Category-based logging with multiple severity levels
+- **Health Monitoring**: Health check endpoint for uptime monitoring
 
 ## Technology Stack
 
@@ -171,6 +177,61 @@ Words are validated both client-side and server-side:
 - Per-player privacy controls (`showInLeaderboard`)
 - Running statistics (games played, wins, average score, best score)
 - Placement calculation per game
+
+## Monitoring & Analytics (Phase 8)
+
+### Admin Dashboard
+Access the admin dashboard at `/admin` to view real-time metrics:
+- **Key Metrics**: Total users, total games, average players per game, online users
+- **Games by Word Length**: Pie chart showing distribution of 4, 5, and 6-letter games
+- **Daily Trend**: Line chart showing games played over the last 7 days
+- **Popular Words**: Bar chart of the 10 most frequently used words
+- **Auto-refresh**: Metrics update automatically every 30 seconds
+
+### Error Tracking (Sentry)
+Optional Sentry integration for production error monitoring:
+```bash
+# Install Sentry (optional)
+npm install @sentry/nextjs
+
+# Configure in .env.local
+NEXT_PUBLIC_SENTRY_DSN=https://your-dsn@sentry.io/project-id
+```
+
+### Analytics Events
+The system automatically tracks:
+- **Game Events**: game_created, game_joined, game_started, game_finished, round_started, round_finished, attempt_submitted, word_submitted
+- **User Events**: user_registered, user_logged_in, user_logged_out, leaderboard_viewed, profile_viewed, settings_changed
+- **Error Events**: error_occurred with context and stack trace
+
+Access analytics via:
+- `GET /api/analytics/game/:gameId` - Game-level metrics
+- `GET /api/analytics/user/:userId` - User-level statistics
+- `GET /api/analytics/global` - Global platform metrics
+
+### Health Check
+Monitor application health at `/api/health`:
+```bash
+curl http://localhost:3000/api/health
+# Returns: { "status": "ok", "uptime": 12345, "timestamp": "..." }
+```
+
+### Rate Limiting
+Built-in request rate limiting with configurable policies:
+- Auth login: 5 requests per 15 minutes
+- Word submission: 5 requests per minute
+- Game attempts: 1 request per second
+- Room creation: 3 requests per 5 minutes
+
+### Structured Logging
+Comprehensive logging across 7 categories:
+- `auth`: Authentication and authorization events
+- `game`: Game state and mechanics events
+- `room`: Room management and participant changes
+- `word`: Dictionary validation and word operations
+- `security`: Security-related events and violations
+- `performance`: Performance metrics and monitoring
+- `error`: Error tracking and exceptions
 
 ## API & Server Actions
 
