@@ -54,7 +54,7 @@ export default function RoomLobbyClient({
       }
 
       // Then submit it
-      const result = await submitWord(roomId, currentUserId, validation.wordId || "", word);
+      const result = await submitWord(roomId, validation.wordId || "", word);
 
       if (result.success) {
         setSuccess("Palavra enviada com sucesso!");
@@ -76,7 +76,7 @@ export default function RoomLobbyClient({
     setError(null);
 
     try {
-      const result = await startGame(roomId, currentUserId);
+      const result = await startGame(roomId);
 
       if (result.success && result.gameId) {
         router.push(`/game/${result.gameId}`);
@@ -95,7 +95,7 @@ export default function RoomLobbyClient({
     if (confirm("Deseja sair da sala?")) {
       setIsLoading(true);
       try {
-        await leaveRoom(roomId, currentUserId);
+        await leaveRoom(roomId);
         router.push("/dashboard");
       } catch (err) {
         setError("Erro ao sair da sala");

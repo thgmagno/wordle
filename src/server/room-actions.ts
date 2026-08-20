@@ -1,22 +1,28 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
+import { auth } from "@/lib/auth";
 import { checkRateLimit, RATE_LIMIT_CONFIGS } from "@/lib/rate-limit";
 import { logger } from "@/lib/logger";
 import { revalidatePath } from "next/cache";
+import { createRound } from "@/server/game-actions";
 
 /**
- * Create a new game room
+ * Create a new game room.
+ * The host is always the currently authenticated user — never a
+ * client-supplied id, to prevent creating rooms in someone else's name.
  */
 export async function createRoom(
-  hostId: string,
   wordLength: number
 ): Promise<{ success: boolean; roomId?: string; error?: string }> {
-  try {
-    if (!hostId) {
-      return { success: false, error: "ID do anfitrião é obrigatório" };
-    }
+  const session = await auth();
+  const hostId = session?.user?.id;
 
+  if (!hostId) {
+    return { success: false, error: "Você precisa estar autenticado" };
+  }
+
+  try {
     if (![4, 5, 6].includes(wordLength)) {
       return { success: false, error: "O comprimento da palavra deve ser 4, 5 ou 6" };
     }
@@ -61,15 +67,23 @@ export async function createRoom(
 }
 
 /**
- * Join a room
+ * Join a room.
+ * The joining user is always the currently authenticated user — never a
+ * client-supplied id, to prevent adding/removing arbitrary participants.
  */
 export async function joinRoom(
-  roomId: string,
-  userId: string
+  roomId: string
 ): Promise<{ success: boolean; error?: string }> {
+  const session = await auth();
+  const userId = session?.user?.id;
+
+  if (!userId) {
+    return { success: false, error: "Você precisa estar autenticado" };
+  }
+
   try {
-    if (!roomId || !userId) {
-      return { success: false, error: "Room ID and User ID are required" };
+    if (!roomId) {
+      return { success: false, error: "Room ID is required" };
     }
 
     // Check if room exists and is in LOBBY status
@@ -131,12 +145,20 @@ export async function joinRoom(
 }
 
 /**
- * Leave a room
+ * Leave a room.
+ * The leaving user is always the currently authenticated user — never a
+ * client-supplied id.
  */
 export async function leaveRoom(
-  roomId: string,
-  userId: string
+  roomId: string
 ): Promise<{ success: boolean; error?: string }> {
+  const session = await auth();
+  const userId = session?.user?.id;
+
+  if (!userId) {
+    return { success: false, error: "Você precisa estar autenticado" };
+  }
+
   try {
     const participant = await prisma.roomParticipant.findUnique({
       where: {
@@ -240,14 +262,22 @@ export async function getRoomInfo(roomId: string) {
 }
 
 /**
- * Submit a word for the game
+ * Submit a word for the game.
+ * The submitting user is always the currently authenticated user — never a
+ * client-supplied id, since the secret word is tied to a specific player.
  */
 export async function submitWord(
   roomId: string,
-  userId: string,
   wordId: string,
   wordText: string
 ): Promise<{ success: boolean; error?: string }> {
+  const session = await auth();
+  const userId = session?.user?.id;
+
+  if (!userId) {
+    return { success: false, error: "Você precisa estar autenticado" };
+  }
+
   try {
     // Check rate limit for word submission
     const rateLimit = await checkRateLimit(
@@ -294,13 +324,21 @@ export async function submitWord(
 }
 
 /**
- * Start the game
- * Only the host can start, and all participants must have submitted words
+ * Start the game.
+ * Only the host (the currently authenticated user, verified against the
+ * room's hostId — never a client-supplied id) can start, and all
+ * participants must have submitted words.
  */
 export async function startGame(
-  roomId: string,
-  userId: string
+  roomId: string
 ): Promise<{ success: boolean; gameId?: string; error?: string }> {
+  const session = await auth();
+  const userId = session?.user?.id;
+
+  if (!userId) {
+    return { success: false, error: "Você precisa estar autenticado" };
+  }
+
   try {
     // Verify user is host
     const room = await prisma.room.findUnique({
@@ -348,6 +386,25 @@ export async function startGame(
         currentRound: 1,
       },
     });
+
+    // Create the first round: pick one of the submitted words as the answer
+    // and put its owner into spectator mode for this round. Without this,
+    // the game record exists but has no playable round.
+    const firstRound = await createRound(game.id, roomId, 1);
+
+    if (!firstRound.success) {
+      // Roll back the game we just created so the room doesn't end up
+      // IN_PROGRESS with a game that has no rounds.
+      await prisma.game.delete({ where: { id: game.id } });
+      logger.error(
+        "game",
+        "Falha ao criar a primeira rodada",
+        new Error(firstRound.error || "unknown"),
+        { roomId, gameId: game.id },
+        userId
+      );
+      return { success: false, error: firstRound.error || "Falha ao criar a primeira rodada" };
+    }
 
     // Update room status
     await prisma.room.update({

@@ -1,6 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
+import { auth } from "@/lib/auth";
 import { evaluateAttempt } from "@/lib/wordle-evaluation";
 import { validateAttemptWord } from "@/server/word-service";
 import { checkRateLimit, RATE_LIMIT_CONFIGS } from "@/lib/rate-limit";
@@ -8,11 +9,51 @@ import { logger } from "@/lib/logger";
 import { revalidatePath } from "next/cache";
 
 /**
- * Submit an attempt for the current round
+ * Selects one of the words submitted to a room and creates a Round for it.
+ * Shared by startGame (round 1) and advanceToNextRound (round 2+) so both
+ * paths pick answers the same way and never reuse an already-played word.
+ */
+export async function createRound(
+  gameId: string,
+  roomId: string,
+  roundNumber: number,
+  excludeWordIds: string[] = []
+): Promise<{ success: boolean; round?: { id: string }; error?: string }> {
+  const submittedWords = await prisma.submittedWord.findMany({
+    where: { roomId },
+  });
+
+  const availableWords = submittedWords.filter(
+    (w: any) => !excludeWordIds.includes(w.wordId)
+  );
+
+  if (availableWords.length === 0) {
+    return { success: false, error: "Nenhuma palavra disponível para esta rodada" };
+  }
+
+  const selectedWord = availableWords[Math.floor(Math.random() * availableWords.length)];
+
+  const round = await prisma.round.create({
+    data: {
+      gameId,
+      roundNumber,
+      answerWordId: selectedWord.wordId,
+      answerWord: selectedWord.wordText,
+      wordOwnerId: selectedWord.userId,
+      status: "ACTIVE",
+    },
+  });
+
+  return { success: true, round };
+}
+
+/**
+ * Submit an attempt for the current round.
+ * The submitting user is always the currently authenticated user — never a
+ * client-supplied id.
  */
 export async function submitAttempt(
   roundId: string,
-  userId: string,
   attemptText: string
 ): Promise<{
   success: boolean;
@@ -20,6 +61,13 @@ export async function submitAttempt(
   isCorrect?: boolean;
   error?: string;
 }> {
+  const session = await auth();
+  const userId = session?.user?.id;
+
+  if (!userId) {
+    return { success: false, error: "Você precisa estar autenticado" };
+  }
+
   try {
     // Check rate limit for game attempts
     const rateLimit = await checkRateLimit(
@@ -176,9 +224,19 @@ export async function submitAttempt(
 }
 
 /**
- * Get game state for a player
+ * Get game state for a player.
+ * The player is always the currently authenticated user — never a
+ * client-supplied id, since it decides whether the secret answer word is
+ * included in the response (spectator vs. active player).
  */
-export async function getGameState(gameId: string, userId: string) {
+export async function getGameState(gameId: string) {
+  const session = await auth();
+  const userId = session?.user?.id;
+
+  if (!userId) {
+    return null;
+  }
+
   try {
     const gameData = await prisma.game.findUnique({
       where: { id: gameId },
@@ -244,11 +302,21 @@ export async function getGameState(gameId: string, userId: string) {
 }
 
 /**
- * Get round info
+ * Get round info for the currently authenticated user.
+ * The secret answer word is only included when the requester is the
+ * spectator for this round (the player whose word is being used) — never
+ * exposed to the players who are actively guessing.
  */
 export async function getRoundInfo(roundId: string) {
+  const session = await auth();
+  const userId = session?.user?.id;
+
+  if (!userId) {
+    return null;
+  }
+
   try {
-    return await prisma.round.findUnique({
+    const round = await prisma.round.findUnique({
       where: { id: roundId },
       include: {
         attempts: {
@@ -260,6 +328,17 @@ export async function getRoundInfo(roundId: string) {
         },
       },
     });
+
+    if (!round) {
+      return null;
+    }
+
+    const isSpectator = round.wordOwnerId === userId;
+
+    return {
+      ...round,
+      answerWord: isSpectator ? round.answerWord : undefined,
+    };
   } catch (error) {
     console.error("Error getting round info:", error);
     return null;
@@ -267,9 +346,16 @@ export async function getRoundInfo(roundId: string) {
 }
 
 /**
- * Get user's attempts in a round
+ * Get the currently authenticated user's attempts in a round.
  */
-export async function getUserAttempts(roundId: string, userId: string) {
+export async function getUserAttempts(roundId: string) {
+  const session = await auth();
+  const userId = session?.user?.id;
+
+  if (!userId) {
+    return [];
+  }
+
   try {
     return await prisma.roundAttempt.findMany({
       where: {
@@ -285,13 +371,22 @@ export async function getUserAttempts(roundId: string, userId: string) {
 }
 
 /**
- * Advance to next round
+ * Advance to next round.
+ * Only the host (the currently authenticated user, verified against the
+ * room's hostId — never a client-supplied id) can advance rounds.
  */
-export async function advanceToNextRound(gameId: string, hostUserId: string): Promise<{
+export async function advanceToNextRound(gameId: string): Promise<{
   success: boolean;
   nextRoundId?: string;
   error?: string;
 }> {
+  const session = await auth();
+  const hostUserId = session?.user?.id;
+
+  if (!hostUserId) {
+    return { success: false, error: "Você precisa estar autenticado" };
+  }
+
   try {
     const game = await prisma.game.findUnique({
       where: { id: gameId },
@@ -335,42 +430,18 @@ export async function advanceToNextRound(gameId: string, hostUserId: string): Pr
       return { success: true };
     }
 
-    // Get submitted words for next round
-    const submittedWords = await prisma.submittedWord.findMany({
-      where: { roomId: game.roomId },
-    });
-
-    if (submittedWords.length === 0) {
-      return { success: false, error: "No words available for next round" };
-    }
-
-    // Select a different word than the last round
+    // Select a different word than the ones already used in previous rounds
     const previousRounds = await prisma.round.findMany({
       where: { gameId },
       select: { answerWordId: true },
     });
-
     const usedWordIds = previousRounds.map((r: any) => r.answerWordId);
-    const availableWords = submittedWords.filter((w: any) => !usedWordIds.includes(w.wordId));
 
-    if (availableWords.length === 0) {
-      return { success: false, error: "No new words available for next round" };
+    const nextRound = await createRound(gameId, game.roomId, nextRoundNumber, usedWordIds);
+
+    if (!nextRound.success || !nextRound.round) {
+      return { success: false, error: nextRound.error || "No words available for next round" };
     }
-
-    // Pick a random word
-    const selectedWord = availableWords[Math.floor(Math.random() * availableWords.length)];
-
-    // Create new round
-    const newRound = await prisma.round.create({
-      data: {
-        gameId,
-        roundNumber: nextRoundNumber,
-        answerWordId: selectedWord.wordId,
-        answerWord: selectedWord.wordText,
-        wordOwnerId: selectedWord.userId,
-        status: "ACTIVE",
-      },
-    });
 
     // Update game
     await prisma.game.update({
@@ -378,10 +449,10 @@ export async function advanceToNextRound(gameId: string, hostUserId: string): Pr
       data: { currentRound: nextRoundNumber },
     });
 
-    logger.info("game", "Nova rodada iniciada", { gameId, roundNumber: nextRoundNumber, wordOwnerId: selectedWord.userId }, hostUserId);
+    logger.info("game", "Nova rodada iniciada", { gameId, roundNumber: nextRoundNumber }, hostUserId);
     revalidatePath(`/game/${gameId}`);
 
-    return { success: true, nextRoundId: newRound.id };
+    return { success: true, nextRoundId: nextRound.round.id };
   } catch (error) {
     logger.error("game", "Erro ao avançar rodada", error as Error, { gameId }, hostUserId);
     return { success: false, error: "Falha ao avançar rodada" };

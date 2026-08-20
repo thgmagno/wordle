@@ -31,7 +31,7 @@ export default function ProfileClient({ userId }: { userId: string }) {
     setIsSaved(false);
 
     try {
-      const result = await updateLeaderboardVisibility(userId, !showInLeaderboard);
+      const result = await updateLeaderboardVisibility(!showInLeaderboard);
 
       if (result.success) {
         setShowInLeaderboard(!showInLeaderboard);
