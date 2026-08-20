@@ -3,6 +3,8 @@
 import { prisma } from "@/lib/prisma";
 import { evaluateAttempt } from "@/lib/wordle-evaluation";
 import { validateAttemptWord } from "@/server/word-service";
+import { checkRateLimit, RATE_LIMIT_CONFIGS } from "@/lib/rate-limit";
+import { logger } from "@/lib/logger";
 import { revalidatePath } from "next/cache";
 
 /**
@@ -19,6 +21,17 @@ export async function submitAttempt(
   error?: string;
 }> {
   try {
+    // Check rate limit for game attempts
+    const rateLimit = await checkRateLimit(
+      `game-attempt-${userId}`,
+      RATE_LIMIT_CONFIGS.GAME_ATTEMPT
+    );
+
+    if (!rateLimit.allowed) {
+      logger.warn("game", "Game attempt rate limit exceeded", { userId, roundId }, userId);
+      return { success: false, error: rateLimit.message || "Aguarde antes de enviar outra tentativa" };
+    }
+
     // Get round info
     const round = await prisma.round.findUnique({
       where: { id: roundId },
@@ -47,6 +60,7 @@ export async function submitAttempt(
     // Validate word
     const wordValidation = await validateAttemptWord(attemptText, round.game.room.wordLength);
     if (!wordValidation.valid) {
+      logger.warn("word", "Invalid word submitted", { userId, word: attemptText, reason: wordValidation.error }, userId);
       return { success: false, error: wordValidation.error };
     }
 
@@ -83,6 +97,8 @@ export async function submitAttempt(
         isCorrect,
       },
     });
+
+    logger.info("game", "Tentativa enviada", { userId, roundId, attemptNumber: attemptCount + 1, isCorrect }, userId);
 
     // If correct, end round
     if (isCorrect) {
@@ -139,6 +155,8 @@ export async function submitAttempt(
           },
         });
       }
+
+      logger.info("game", "Rodada finalizada com vitória", { userId, roundId, score: finalScore, attemptsUsed: attemptCount + 1 }, userId);
     }
 
     revalidatePath(`/game/${round.gameId}`);
@@ -152,7 +170,7 @@ export async function submitAttempt(
       isCorrect,
     };
   } catch (error) {
-    console.error("Error submitting attempt:", error);
+    logger.error("game", "Erro ao enviar tentativa", error as Error, { userId, roundId }, userId);
     return { success: false, error: "Falha ao enviar tentativa" };
   }
 }
@@ -285,6 +303,7 @@ export async function advanceToNextRound(gameId: string, hostUserId: string): Pr
     }
 
     if (game.room.hostId !== hostUserId) {
+      logger.warn("security", "Non-host attempted to advance round", { userId: hostUserId, gameId }, hostUserId);
       return { success: false, error: "Only the host can advance rounds" };
     }
 
@@ -312,6 +331,7 @@ export async function advanceToNextRound(gameId: string, hostUserId: string): Pr
         },
       });
 
+      logger.info("game", "Jogo finalizado", { gameId, totalRounds: game.totalRounds }, hostUserId);
       return { success: true };
     }
 
@@ -358,11 +378,12 @@ export async function advanceToNextRound(gameId: string, hostUserId: string): Pr
       data: { currentRound: nextRoundNumber },
     });
 
+    logger.info("game", "Nova rodada iniciada", { gameId, roundNumber: nextRoundNumber, wordOwnerId: selectedWord.userId }, hostUserId);
     revalidatePath(`/game/${gameId}`);
 
     return { success: true, nextRoundId: newRound.id };
   } catch (error) {
-    console.error("Error advancing to next round:", error);
+    logger.error("game", "Erro ao avançar rodada", error as Error, { gameId }, hostUserId);
     return { success: false, error: "Falha ao avançar rodada" };
   }
 }
