@@ -222,6 +222,43 @@ export default function GameBoardClient({
             </div>
           ))}
         </div>
+
+        {error && (
+          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-800 dark:text-red-300 px-4 py-3 rounded-lg text-center">
+            {error}
+          </div>
+        )}
+
+        {/* Round advancement controls. The spectator (the round's word
+            owner) never plays this round themselves, but if they're also
+            the host, they're the only one who can advance the game once
+            everyone else has finished — without this, a host whose word
+            got drawn would leave every other player stuck forever waiting
+            on a "Próxima Rodada" button that only ever rendered in the
+            non-spectator branch below. */}
+        {currentRound?.status === "FINISHED" && (
+          <div className="card bg-slate-50 dark:bg-slate-800 text-center">
+            {gameState.currentRound < gameState.totalRounds ? (
+              isHost ? (
+                <button
+                  onClick={handleNextRound}
+                  disabled={isLoading}
+                  className="bg-blue-600 hover:bg-blue-700 disabled:bg-slate-400 text-white font-semibold px-6 py-3 rounded-lg transition-colors disabled:cursor-not-allowed"
+                >
+                  {isLoading ? "Carregando..." : "Próxima Rodada"}
+                </button>
+              ) : (
+                <p className="text-sm text-slate-600 dark:text-slate-400">
+                  Aguardando o anfitrião iniciar a próxima rodada...
+                </p>
+              )
+            ) : (
+              <a href="/dashboard" className="btn-primary">
+                Voltar para Dashboard
+              </a>
+            )}
+          </div>
+        )}
       </div>
     );
   }
