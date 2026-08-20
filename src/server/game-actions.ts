@@ -495,31 +495,37 @@ export async function getGameState(gameId: string) {
 
     // Every other active player's guesses this round (word + correctness
     // pattern), grouped per player so the UI can render one board per
-    // player. Visible to the spectator (CLAUDE.md section 19 expects them
-    // to be able to follow along — their word is the round's answer, so
-    // this exposes nothing they don't already know) AND to an active
-    // player guessing alongside them: seeing a peer's attempts/results
-    // doesn't reveal the secret word either, only how far along that peer
-    // is — the same information the spectator has always seen. Excluding
-    // `userId`'s own attempts is what makes this safe to compute the same
-    // way for both: the spectator never has any (they're blocked from
-    // submitting — see submitAttempt), so nothing is filtered out for
-    // them, while an active player's own board is already shown
-    // separately via `ownAttempts` and shouldn't be duplicated here.
-    const byUser = new Map<string, typeof round.attempts>();
-    for (const attempt of round.attempts) {
-      if (attempt.userId === userId) continue;
-      const list = byUser.get(attempt.userId) ?? [];
-      list.push(attempt);
-      byUser.set(attempt.userId, list);
+    // player. Spectator-only: their word IS the round's answer, so this
+    // exposes nothing they don't already know (CLAUDE.md section 19
+    // expects them to be able to follow along) — but an active player
+    // guessing alongside peers must NOT get this. A peer's board reveals
+    // the answer outright the instant that peer solves it (their winning
+    // attempt is an all-CORRECT row — literally the secret word, spelled
+    // out) well before the round or match ends for anyone else, which both
+    // trivializes the round for whoever sees it next and breaks the
+    // "answer only revealed once the round is FINISHED for everyone" rule
+    // enforced everywhere else in this function (see `canRevealAnswer`
+    // below). This was briefly extended to active players and reverted
+    // for exactly that reason.
+    let othersProgress:
+      | Array<{
+          user: { id: string; name: string | null; image: string | null };
+          attempts: typeof round.attempts;
+        }>
+      | undefined;
+
+    if (isSpectator) {
+      const byUser = new Map<string, typeof round.attempts>();
+      for (const attempt of round.attempts) {
+        const list = byUser.get(attempt.userId) ?? [];
+        list.push(attempt);
+        byUser.set(attempt.userId, list);
+      }
+      othersProgress = Array.from(byUser.values()).map((playerAttempts) => ({
+        user: playerAttempts[0].user,
+        attempts: playerAttempts,
+      }));
     }
-    const othersProgress: Array<{
-      user: { id: string; name: string | null; image: string | null };
-      attempts: typeof round.attempts;
-    }> = Array.from(byUser.values()).map((playerAttempts) => ({
-      user: playerAttempts[0].user,
-      attempts: playerAttempts,
-    }));
 
     // The answer is only safe to reveal once the round is truly over for
     // everyone (round.status flips to FINISHED only once every active
