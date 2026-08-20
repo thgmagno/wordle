@@ -22,6 +22,60 @@ interface AttemptResult {
   status: "CORRECT" | "PRESENT" | "ABSENT";
 }
 
+/**
+ * Round/match advancement controls, shared by the spectator and active-
+ * player Game Over screens below.
+ *
+ * Reaching the last round is not the same as the match being over: the
+ * game record only flips to FINISHED (and match statistics only get
+ * finalized) once the host actually triggers that transition — nothing
+ * does it automatically. So on the last round this still needs a host
+ * action ("Finalizar Partida", wired to the same advanceToNextRound call
+ * as "Próxima Rodada") rather than a static dashboard link; the link is
+ * only correct once gameState.status itself is already "FINISHED".
+ */
+function RoundAdvanceControls({
+  gameState,
+  isHost,
+  isLoading,
+  onAdvance,
+}: {
+  gameState: GameState;
+  isHost: boolean;
+  isLoading: boolean;
+  onAdvance: () => void;
+}) {
+  if (gameState.status === "FINISHED") {
+    return (
+      <a href="/dashboard" className="btn-primary">
+        Voltar para Dashboard
+      </a>
+    );
+  }
+
+  const isLastRound = gameState.currentRound >= gameState.totalRounds;
+
+  if (!isHost) {
+    return (
+      <p className="text-sm text-slate-600 dark:text-slate-400">
+        {isLastRound
+          ? "Aguardando o anfitrião finalizar a partida..."
+          : "Aguardando o anfitrião iniciar a próxima rodada..."}
+      </p>
+    );
+  }
+
+  return (
+    <button
+      onClick={onAdvance}
+      disabled={isLoading}
+      className="bg-blue-600 hover:bg-blue-700 disabled:bg-slate-400 text-white font-semibold px-6 py-3 rounded-lg transition-colors disabled:cursor-not-allowed"
+    >
+      {isLoading ? "Carregando..." : isLastRound ? "Finalizar Partida" : "Próxima Rodada"}
+    </button>
+  );
+}
+
 export default function GameBoardClient({
   gameId,
   gameState,
@@ -145,17 +199,20 @@ export default function GameBoardClient({
     setError(null);
 
     try {
-      // Only host can advance
+      // Only host can advance. On the last round this same call is what
+      // finalizes the match (advanceToNextRound flips Game/Room status to
+      // FINISHED and records final statistics) — there is no separate
+      // "finish game" action.
       const result = await advanceToNextRound(gameId);
 
       if (result.success) {
         // Reload page or navigate to next round
         window.location.reload();
       } else {
-        setError(result.error || "Erro ao avançar para próxima rodada");
+        setError(result.error || "Erro ao avançar a partida");
       }
     } catch (err) {
-      setError("Erro ao avançar para próxima rodada");
+      setError("Erro ao avançar a partida");
       console.error(err);
     } finally {
       setIsLoading(false);
@@ -238,25 +295,12 @@ export default function GameBoardClient({
             non-spectator branch below. */}
         {currentRound?.status === "FINISHED" && (
           <div className="card bg-slate-50 dark:bg-slate-800 text-center">
-            {gameState.currentRound < gameState.totalRounds ? (
-              isHost ? (
-                <button
-                  onClick={handleNextRound}
-                  disabled={isLoading}
-                  className="bg-blue-600 hover:bg-blue-700 disabled:bg-slate-400 text-white font-semibold px-6 py-3 rounded-lg transition-colors disabled:cursor-not-allowed"
-                >
-                  {isLoading ? "Carregando..." : "Próxima Rodada"}
-                </button>
-              ) : (
-                <p className="text-sm text-slate-600 dark:text-slate-400">
-                  Aguardando o anfitrião iniciar a próxima rodada...
-                </p>
-              )
-            ) : (
-              <a href="/dashboard" className="btn-primary">
-                Voltar para Dashboard
-              </a>
-            )}
+            <RoundAdvanceControls
+              gameState={gameState}
+              isHost={isHost}
+              isLoading={isLoading}
+              onAdvance={handleNextRound}
+            />
           </div>
         )}
       </div>
@@ -361,28 +405,12 @@ export default function GameBoardClient({
               Aguardando os outros jogadores concluírem a rodada...
             </p>
           ) : (
-            <>
-              {gameState.currentRound < gameState.totalRounds &&
-                (isHost ? (
-                  <button
-                    onClick={handleNextRound}
-                    disabled={isLoading}
-                    className="bg-blue-600 hover:bg-blue-700 disabled:bg-slate-400 text-white font-semibold px-6 py-3 rounded-lg transition-colors disabled:cursor-not-allowed"
-                  >
-                    {isLoading ? "Carregando..." : "Próxima Rodada"}
-                  </button>
-                ) : (
-                  <p className="text-sm text-slate-600 dark:text-slate-400">
-                    Aguardando o anfitrião iniciar a próxima rodada...
-                  </p>
-                ))}
-
-              {gameState.currentRound === gameState.totalRounds && (
-                <a href="/dashboard" className="btn-primary">
-                  Voltar para Dashboard
-                </a>
-              )}
-            </>
+            <RoundAdvanceControls
+              gameState={gameState}
+              isHost={isHost}
+              isLoading={isLoading}
+              onAdvance={handleNextRound}
+            />
           )}
         </div>
       )}
