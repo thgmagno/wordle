@@ -57,7 +57,7 @@ cp .env.example .env.local
 4. Fill in your environment variables:
 ```env
 # Database
-DATABASE_URL="mongodb://your-connection-string"
+MONGODB_URI="mongodb://your-connection-string"
 
 # NextAuth
 NEXTAUTH_URL="http://localhost:3000"
@@ -306,7 +306,7 @@ Tests include:
 
 ### Environment Variables
 ```
-DATABASE_URL
+MONGODB_URI
 NEXTAUTH_URL
 NEXTAUTH_SECRET
 GOOGLE_CLIENT_ID

@@ -6,7 +6,7 @@ function getPrismaClient() {
   }
 
   // During build time, Prisma might not be available
-  if (process.env.NODE_ENV === "production" && !process.env.DATABASE_URL) {
+  if (process.env.NODE_ENV === "production" && !process.env.MONGODB_URI) {
     return null;
   }
 
@@ -33,7 +33,7 @@ export const prisma = new Proxy(
       const client = getPrismaClient();
       if (!client) {
         throw new Error(
-          "Prisma client not initialized. Make sure DATABASE_URL is set."
+          "Prisma client not initialized. Make sure MONGODB_URI is set."
         );
       }
       return (client as any)[prop];
