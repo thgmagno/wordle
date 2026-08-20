@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { submitWord, startGame, leaveRoom } from "@/server/room-actions";
-import { validateAnswerWord } from "@/server/word-service";
+import { validateAnswerWordAction } from "@/server/word-actions";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -45,7 +45,7 @@ export default function RoomLobbyClient({
 
     try {
       // First validate the word
-      const validation = await validateAnswerWord(word, room.wordLength);
+      const validation = await validateAnswerWordAction(word, room.wordLength);
 
       if (!validation.valid) {
         setError(validation.error || "Palavra inválida");
