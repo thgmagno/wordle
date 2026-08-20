@@ -215,7 +215,12 @@ export async function leaveRoom(
 }
 
 /**
- * Get room info
+ * Get room info.
+ * Only the fields the lobby UI actually needs are selected — in
+ * particular, no participant's email is sent to the client: nothing
+ * renders it, and every participant in a room can currently see this
+ * payload, so it would otherwise leak everyone's email to everyone else
+ * in the room for no functional reason.
  */
 export async function getRoomInfo(roomId: string) {
   try {
@@ -226,7 +231,6 @@ export async function getRoomInfo(roomId: string) {
           select: {
             id: true,
             name: true,
-            email: true,
             image: true,
           },
         },
@@ -237,7 +241,6 @@ export async function getRoomInfo(roomId: string) {
               select: {
                 id: true,
                 name: true,
-                email: true,
                 image: true,
               },
             },

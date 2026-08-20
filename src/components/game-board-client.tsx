@@ -123,7 +123,11 @@ export default function GameBoardClient({
           setIsGameOver(true);
         } else if (attempts.length + 1 >= maxAttempts) {
           setIsGameOver(true);
-          setError(`Fim do jogo! A palavra era: ${currentRound.answerWord}`);
+          // The answer isn't revealed to this player until the round is
+          // actually FINISHED for everyone (see getGameState) — the Game
+          // Over screen below shows it once that happens, so this message
+          // only needs to say the attempts ran out, not guess at the word.
+          setError("Fim das tentativas!");
         }
       } else {
         setError(result.error || "Erro ao enviar tentativa");
@@ -301,7 +305,13 @@ export default function GameBoardClient({
                 Game Over
               </h2>
               <p className="text-slate-600 dark:text-slate-400 mb-6">
-                A palavra era: <span className="font-bold text-lg">{currentRound?.answerWord}</span>
+                {currentRound?.answerWord ? (
+                  <>
+                    A palavra era: <span className="font-bold text-lg">{currentRound.answerWord}</span>
+                  </>
+                ) : (
+                  "Aguardando o fim da rodada para revelar a palavra..."
+                )}
               </p>
             </>
           )}
