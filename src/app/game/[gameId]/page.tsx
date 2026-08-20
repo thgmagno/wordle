@@ -11,7 +11,7 @@ export default async function GamePage({ params }: { params: { gameId: string } 
     redirect("/auth/signin");
   }
 
-  const gameState = await getGameState(params.gameId, session.user.id || "");
+  const gameState = await getGameState(params.gameId);
 
   if (!gameState) {
     return (

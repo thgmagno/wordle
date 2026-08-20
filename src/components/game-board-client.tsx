@@ -84,11 +84,7 @@ export default function GameBoardClient({
     setSuccess(null);
 
     try {
-      const result = await submitAttempt(
-        currentRound.id,
-        currentUserId,
-        word
-      );
+      const result = await submitAttempt(currentRound.id, word);
 
       if (result.success && result.feedback) {
         const newAttempt = {
@@ -125,7 +121,7 @@ export default function GameBoardClient({
 
     try {
       // Only host can advance
-      const result = await advanceToNextRound(gameId, currentUserId);
+      const result = await advanceToNextRound(gameId);
 
       if (result.success) {
         // Reload page or navigate to next round

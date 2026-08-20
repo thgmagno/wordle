@@ -25,7 +25,7 @@ export default function CreateRoomPage() {
         return;
       }
 
-      const result = await createRoom(session.user.id, wordLength);
+      const result = await createRoom(wordLength);
 
       if (result.success && result.roomId) {
         router.push(`/room/${result.roomId}`);

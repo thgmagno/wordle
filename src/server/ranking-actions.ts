@@ -1,6 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
+import { auth } from "@/lib/auth";
 import { logger } from "@/lib/logger";
 import type { PaginatedResponse, UserStatistics } from "@/types";
 
@@ -199,12 +200,21 @@ export async function getPlayerProfile(userId: string) {
 }
 
 /**
- * Update user leaderboard visibility
+ * Update user leaderboard visibility.
+ * Always applies to the currently authenticated user — never a
+ * client-supplied id, so one user can never change another's privacy
+ * setting.
  */
 export async function updateLeaderboardVisibility(
-  userId: string,
   showInLeaderboard: boolean
 ): Promise<{ success: boolean; error?: string }> {
+  const session = await auth();
+  const userId = session?.user?.id;
+
+  if (!userId) {
+    return { success: false, error: "Você precisa estar autenticado" };
+  }
+
   try {
     await prisma.user.update({
       where: { id: userId },
