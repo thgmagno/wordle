@@ -7,6 +7,13 @@ import { MAX_ATTEMPTS } from "@/lib/wordle-evaluation";
 import { WordleGrid } from "./wordle-grid";
 import { WordleKeyboard } from "./wordle-keyboard";
 
+interface MatchResultEntry {
+  userId: string;
+  user: { id: string; name: string | null; image: string | null };
+  finalScore: number;
+  placement: number;
+}
+
 interface GameState {
   id: string;
   status: string;
@@ -15,11 +22,48 @@ interface GameState {
   isSpectator: boolean;
   rounds: any[];
   room: { wordLength: number };
+  matchResults?: MatchResultEntry[];
 }
 
 interface AttemptResult {
   letter: string;
   status: "CORRECT" | "PRESENT" | "ABSENT";
+}
+
+/**
+ * Final placar: every player who took part in the match, ranked by total
+ * score, once the match itself has ended (CLAUDE.md section 22 — colocação,
+ * nome, foto e pontuação por jogador).
+ */
+function FinalScoreboard({ results }: { results: MatchResultEntry[] }) {
+  return (
+    <div className="space-y-2 text-left">
+      <h3 className="text-lg font-semibold text-center mb-3">🏆 Placar Final</h3>
+      {results.map((entry) => (
+        <div
+          key={entry.userId}
+          className={`flex items-center gap-3 p-3 rounded-lg border ${
+            entry.placement === 1
+              ? "bg-yellow-50 dark:bg-yellow-900/20 border-yellow-300 dark:border-yellow-700"
+              : "bg-white dark:bg-slate-700 border-slate-200 dark:border-slate-600"
+          }`}
+        >
+          <span className="w-8 shrink-0 text-center font-bold text-slate-500 dark:text-slate-400">
+            {entry.placement}º
+          </span>
+          {entry.user.image ? (
+            <img src={entry.user.image} alt="" className="w-8 h-8 rounded-full shrink-0" />
+          ) : (
+            <div className="w-8 h-8 rounded-full bg-slate-300 dark:bg-slate-600 shrink-0" />
+          )}
+          <span className="flex-1 min-w-0 truncate font-medium">
+            {entry.user.name || "Jogador"}
+          </span>
+          <span className="shrink-0 font-bold">{entry.finalScore} pts</span>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 /**
@@ -47,9 +91,14 @@ function RoundAdvanceControls({
 }) {
   if (gameState.status === "FINISHED") {
     return (
-      <a href="/dashboard" className="btn-primary">
-        Voltar para Dashboard
-      </a>
+      <div className="space-y-6">
+        {gameState.matchResults && gameState.matchResults.length > 0 && (
+          <FinalScoreboard results={gameState.matchResults} />
+        )}
+        <a href="/dashboard" className="btn-primary">
+          Voltar para Dashboard
+        </a>
+      </div>
     );
   }
 

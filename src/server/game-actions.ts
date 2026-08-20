@@ -371,6 +371,49 @@ export async function getGameState(gameId: string) {
     // before that, only the spectator (who submitted the word) may see it.
     const canRevealAnswer = isSpectator || round.status === "FINISHED";
 
+    // Once the match itself is over, build the final placar: every player
+    // who took part in the match, ranked by total score. This has to start
+    // from the room's participant roster rather than just the MatchScore
+    // rows — a player who never solved a single round still finished the
+    // match with 0 points and a real (last) placement, and CLAUDE.md's
+    // "PLACAR FINAL" section requires every player's placement, not just
+    // the ones who scored.
+    let matchResults:
+      | Array<{
+          userId: string;
+          user: { id: string; name: string | null; image: string | null };
+          finalScore: number;
+          placement: number;
+        }>
+      | undefined;
+
+    if (fullGame.status === "FINISHED") {
+      const matchScores = await prisma.matchScore.findMany({ where: { gameId } });
+      const scoreByUserId = new Map(matchScores.map((s: any) => [s.userId, s.finalScore]));
+
+      const ranked = fullGame.room.participants
+        .map((p: any) => ({
+          userId: p.userId,
+          user: p.user,
+          finalScore: scoreByUserId.get(p.userId) ?? 0,
+        }))
+        .sort((a: any, b: any) => b.finalScore - a.finalScore);
+
+      // Standard competition ranking: tied scores share a placement, and
+      // the next distinct score resumes at (index + 1), not the next
+      // integer — e.g. two players tied for 1st are both "1º", the next
+      // player is "3º".
+      let placement = 0;
+      let previousScore: number | null = null;
+      matchResults = ranked.map((entry: any, index: number) => {
+        if (previousScore === null || entry.finalScore !== previousScore) {
+          placement = index + 1;
+          previousScore = entry.finalScore;
+        }
+        return { ...entry, placement };
+      });
+    }
+
     return {
       ...fullGame,
       rounds: [
@@ -382,6 +425,7 @@ export async function getGameState(gameId: string) {
         },
       ],
       isSpectator,
+      matchResults,
     };
   } catch (error) {
     console.error("Error getting game state:", error);
