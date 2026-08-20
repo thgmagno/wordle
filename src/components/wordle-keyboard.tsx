@@ -96,7 +96,7 @@ export function WordleKeyboard({
     // flex-none plus justify-center on each row reproduces the classic
     // Wordle keyboard look instead: identical key size everywhere, and
     // shorter rows just end up centered.
-    <div className="flex flex-col gap-1.5 w-full max-w-2xl mx-auto px-1 sm:px-2">
+    <div className="flex flex-col gap-1 sm:gap-1.5 w-full max-w-2xl mx-auto px-1 sm:px-2">
       {KEYBOARD_ROWS.map((row, rowIndex) => (
         <div key={rowIndex} className="flex gap-1 sm:gap-1.5 justify-center">
           {row.map((key) => (
@@ -104,7 +104,7 @@ export function WordleKeyboard({
               key={key}
               onClick={() => onKeyPress(key)}
               disabled={disabled}
-              className={`${getKeyClass(key)} flex-none w-[clamp(1.75rem,8.5vw,2.75rem)] h-11 sm:h-12 px-0 flex items-center justify-center`}
+              className={`${getKeyClass(key)} flex-none w-[clamp(1.75rem,8.5vw,2.75rem)] h-9 sm:h-12 px-0 flex items-center justify-center`}
             >
               {key.toUpperCase()}
             </button>
@@ -115,7 +115,7 @@ export function WordleKeyboard({
               onClick={() => onKeyPress("backspace")}
               disabled={disabled}
               aria-label="Apagar letra"
-              className="keyboard-key flex-none w-[clamp(2.75rem,13vw,4rem)] h-11 sm:h-12 px-0 flex items-center justify-center"
+              className="keyboard-key flex-none w-[clamp(2.75rem,13vw,4rem)] h-9 sm:h-12 px-0 flex items-center justify-center"
             >
               ⌫
             </button>

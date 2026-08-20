@@ -65,12 +65,16 @@ export function WordleGrid({
     // fixed px width: with a fixed size, a 6-letter grid plus its gaps
     // doesn't fit inside a narrow phone's viewport (e.g. 6 * 56px + 5 * 8px
     // = 376px, wider than a 360px screen minus the page's own padding) and
-    // overflows horizontally. max-w-xs caps how large tiles get on desktop;
-    // min-w-0 stops flex's default content-based minimum width from
-    // fighting the shrink on the narrowest phones.
-    <div className="flex flex-col gap-1.5 sm:gap-2 w-full max-w-xs mx-auto">
+    // overflows horizontally. The max-width is capped tighter on mobile
+    // (240px vs. the desktop 320px/max-w-xs) so tiles — and therefore the
+    // whole grid's height, since each tile is aspect-square — stay small
+    // enough that a 6-attempt board still fits above the keyboard without
+    // scrolling on a phone screen. min-w-0 stops flex's default
+    // content-based minimum width from fighting the shrink on the
+    // narrowest phones.
+    <div className="flex flex-col gap-1 sm:gap-2 w-full max-w-[240px] sm:max-w-xs mx-auto">
       {gridData.map((row, rowIndex) => (
-        <div key={rowIndex} className="flex gap-1.5 sm:gap-2">
+        <div key={rowIndex} className="flex gap-1 sm:gap-2">
           {row.map((tile, colIndex) => (
             <div
               key={`${rowIndex}-${colIndex}`}

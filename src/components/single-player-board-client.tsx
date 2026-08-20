@@ -7,6 +7,7 @@ import {
   startSinglePlayerGame,
   submitSinglePlayerAttempt,
 } from "@/server/single-player-actions";
+import { Toast } from "./toast";
 import { WordleGrid } from "./wordle-grid";
 import { WordleKeyboard } from "./wordle-keyboard";
 
@@ -127,7 +128,7 @@ export default function SinglePlayerBoardClient({
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-2 sm:space-y-4">
       {/* Wordle Grid */}
       <div className="flex justify-center">
         <WordleGrid
@@ -138,17 +139,18 @@ export default function SinglePlayerBoardClient({
         />
       </div>
 
-      {/* Messages */}
+      {/* Messages float above the page as a toast instead of an inline
+          banner — an inline banner pushes the grid/keyboard down and was
+          exactly what forced the board below the fold on a phone screen. */}
       {error && (
-        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-800 dark:text-red-300 px-4 py-3 rounded-lg text-center">
-          {error}
-        </div>
+        <Toast message={error} type="error" onDismiss={() => setError(null)} />
       )}
-
       {success && (
-        <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-green-800 dark:text-green-300 px-4 py-3 rounded-lg text-center">
-          {success}
-        </div>
+        <Toast
+          message={success}
+          type="success"
+          onDismiss={() => setSuccess(null)}
+        />
       )}
 
       {/* Attempt counter — the current attempt is shown as tiles in the
@@ -167,7 +169,7 @@ export default function SinglePlayerBoardClient({
           type="button"
           onClick={handleSubmitAttempt}
           disabled={isLoading || word.length !== wordLength}
-          className="w-full max-w-2xl mx-auto block bg-blue-600 hover:bg-blue-700 disabled:bg-slate-400 text-white font-semibold py-3 rounded-lg transition-colors disabled:cursor-not-allowed"
+          className="w-full max-w-2xl mx-auto block bg-blue-600 hover:bg-blue-700 disabled:bg-slate-400 text-white font-semibold py-2 sm:py-3 rounded-lg transition-colors disabled:cursor-not-allowed"
         >
           {isLoading ? "Enviando..." : "Enviar"}
         </button>
@@ -183,23 +185,23 @@ export default function SinglePlayerBoardClient({
 
       {/* Game Over Screen */}
       {isGameOver && (
-        <div className="card bg-slate-50 dark:bg-slate-800 text-center space-y-6">
+        <div className="card bg-slate-50 dark:bg-slate-800 text-center space-y-3 sm:space-y-6 py-4 sm:py-6">
           {isWon ? (
             <>
-              <h2 className="text-3xl font-bold text-green-600 dark:text-green-400 mb-2">
+              <h2 className="text-2xl sm:text-3xl font-bold text-green-600 dark:text-green-400 mb-1 sm:mb-2">
                 🎉 Parabéns!
               </h2>
-              <p className="text-slate-600 dark:text-slate-400">
+              <p className="text-sm sm:text-base text-slate-600 dark:text-slate-400">
                 Você acertou em {attempts.length}{" "}
                 {attempts.length === 1 ? "tentativa" : "tentativas"}!
               </p>
             </>
           ) : (
             <>
-              <h2 className="text-3xl font-bold text-red-600 dark:text-red-400 mb-2">
+              <h2 className="text-2xl sm:text-3xl font-bold text-red-600 dark:text-red-400 mb-1 sm:mb-2">
                 Game Over
               </h2>
-              <p className="text-slate-600 dark:text-slate-400">
+              <p className="text-sm sm:text-base text-slate-600 dark:text-slate-400">
                 A palavra era:{" "}
                 <span className="font-bold text-lg">{answerWord}</span>
               </p>
@@ -211,7 +213,7 @@ export default function SinglePlayerBoardClient({
               type="button"
               onClick={handlePlayAgain}
               disabled={isRestarting}
-              className="bg-blue-600 hover:bg-blue-700 disabled:bg-slate-400 text-white font-semibold px-6 py-3 rounded-lg transition-colors disabled:cursor-not-allowed"
+              className="bg-blue-600 hover:bg-blue-700 disabled:bg-slate-400 text-white font-semibold px-6 py-2 sm:py-3 rounded-lg transition-colors disabled:cursor-not-allowed"
             >
               {isRestarting ? "Carregando..." : "Jogar Novamente"}
             </button>

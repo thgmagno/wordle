@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { submitAttempt, advanceToNextRound } from "@/server/game-actions";
 import { useGameRealtime } from "@/lib/use-realtime";
 import { MAX_ATTEMPTS } from "@/lib/wordle-evaluation";
+import { Toast } from "./toast";
 import { WordleGrid } from "./wordle-grid";
 import { WordleKeyboard } from "./wordle-keyboard";
 
@@ -315,11 +316,7 @@ export default function GameBoardClient({
           ))}
         </div>
 
-        {error && (
-          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-800 dark:text-red-300 px-4 py-3 rounded-lg text-center">
-            {error}
-          </div>
-        )}
+        {error && <Toast message={error} type="error" onDismiss={() => setError(null)} />}
 
         {/* Round advancement controls. The spectator (the round's word
             owner) never plays this round themselves, but if they're also
@@ -343,7 +340,7 @@ export default function GameBoardClient({
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-2 sm:space-y-4">
       {/* Wordle Grid */}
       <div className="flex justify-center">
         <WordleGrid
@@ -354,18 +351,11 @@ export default function GameBoardClient({
         />
       </div>
 
-      {/* Messages */}
-      {error && (
-        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-800 dark:text-red-300 px-4 py-3 rounded-lg text-center">
-          {error}
-        </div>
-      )}
-
-      {success && (
-        <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-green-800 dark:text-green-300 px-4 py-3 rounded-lg text-center">
-          {success}
-        </div>
-      )}
+      {/* Messages float above the page as a toast instead of an inline
+          banner — an inline banner pushes the grid/keyboard down and was
+          exactly what forced the board below the fold on a phone screen. */}
+      {error && <Toast message={error} type="error" onDismiss={() => setError(null)} />}
+      {success && <Toast message={success} type="success" onDismiss={() => setSuccess(null)} />}
 
       {/* Attempt counter — the current attempt itself is shown as tiles in
           the grid above (WordleGrid's currentAttempt prop), not in a text
@@ -387,7 +377,7 @@ export default function GameBoardClient({
         <button
           onClick={handleSubmitAttempt}
           disabled={isLoading || word.length !== wordLength}
-          className="w-full max-w-2xl mx-auto block bg-blue-600 hover:bg-blue-700 disabled:bg-slate-400 text-white font-semibold py-3 rounded-lg transition-colors disabled:cursor-not-allowed"
+          className="w-full max-w-2xl mx-auto block bg-blue-600 hover:bg-blue-700 disabled:bg-slate-400 text-white font-semibold py-2 sm:py-3 rounded-lg transition-colors disabled:cursor-not-allowed"
         >
           {isLoading ? "Enviando..." : "Enviar"}
         </button>
@@ -403,22 +393,22 @@ export default function GameBoardClient({
 
       {/* Game Over Screen */}
       {isGameOver && (
-        <div className="card bg-slate-50 dark:bg-slate-800 text-center">
+        <div className="card bg-slate-50 dark:bg-slate-800 text-center py-4 sm:py-6">
           {isWon ? (
             <>
-              <h2 className="text-3xl font-bold text-green-600 dark:text-green-400 mb-4">
+              <h2 className="text-2xl sm:text-3xl font-bold text-green-600 dark:text-green-400 mb-1 sm:mb-4">
                 🎉 Parabéns!
               </h2>
-              <p className="text-slate-600 dark:text-slate-400 mb-6">
+              <p className="text-sm sm:text-base text-slate-600 dark:text-slate-400 mb-3 sm:mb-6">
                 Você acertou em {attempts.length} {attempts.length === 1 ? "tentativa" : "tentativas"}!
               </p>
             </>
           ) : (
             <>
-              <h2 className="text-3xl font-bold text-red-600 dark:text-red-400 mb-4">
+              <h2 className="text-2xl sm:text-3xl font-bold text-red-600 dark:text-red-400 mb-1 sm:mb-4">
                 Game Over
               </h2>
-              <p className="text-slate-600 dark:text-slate-400 mb-6">
+              <p className="text-sm sm:text-base text-slate-600 dark:text-slate-400 mb-3 sm:mb-6">
                 {currentRound?.answerWord ? (
                   <>
                     A palavra era: <span className="font-bold text-lg">{currentRound.answerWord}</span>

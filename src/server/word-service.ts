@@ -80,6 +80,66 @@ export async function getRandomWords(
 }
 
 /**
+ * Get a random word biased toward common, recognizable vocabulary.
+ *
+ * `getRandomWords` (above) picks uniformly at random from the whole valid
+ * pool, which single-player games use to draw an answer with nobody around
+ * to vouch that the word "makes sense" — unlike multiplayer, where a human
+ * player chose the secret word themselves. Left unfiltered that surfaces
+ * archaic/regional/technical dictionary entries (e.g. "acoar") that read as
+ * nonsense to most players.
+ *
+ * There's no reliable flag for "this word is normal" in the dictionary, but
+ * `icfScore` (lower = more frequent/common, higher = rarer — see CLAUDE.md
+ * section 28) is a reasonable proxy. A fixed score/percentile cutoff would
+ * be fragile — it depends on the specific imported corpus and still lets
+ * some obscure words through near the boundary. Instead, this samples a
+ * random batch of candidates (same skip-based randomization as
+ * `getRandomWords`) and returns whichever one in that batch has the lowest
+ * icfScore. That's self-correcting — it never returns a genuine outlier
+ * unless the whole sample happens to be rare — with no hardcoded threshold
+ * to keep in sync with the dictionary.
+ */
+export async function getRandomCommonWord(
+  length: number,
+  excludeIds: string[] = [],
+  sampleSize: number = 25
+) {
+  const where = {
+    length: parseInt(String(length), 10),
+    isValid: true,
+    isNegative: false,
+    id: excludeIds.length > 0 ? { notIn: excludeIds } : undefined,
+  };
+
+  const total = await prisma.word.count({ where });
+  if (total === 0) {
+    return null;
+  }
+
+  const skip = Math.floor(Math.random() * Math.max(total - sampleSize, 1));
+
+  const candidates = await prisma.word.findMany({
+    where,
+    take: sampleSize,
+    skip: Math.max(0, skip),
+  });
+
+  if (candidates.length === 0) {
+    return null;
+  }
+
+  // A word with no recorded icfScore is treated as maximally rare, so it
+  // only gets picked if literally nothing else in the sample has a score.
+  type Candidate = (typeof candidates)[number];
+  return candidates.reduce((mostCommon: Candidate, candidate: Candidate) => {
+    const candidateScore = candidate.icfScore ?? Number.POSITIVE_INFINITY;
+    const bestScore = mostCommon.icfScore ?? Number.POSITIVE_INFINITY;
+    return candidateScore < bestScore ? candidate : mostCommon;
+  });
+}
+
+/**
  * Get words by length
  */
 export async function getWordsByLength(length: number, limit: number = 100) {
