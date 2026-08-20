@@ -132,7 +132,6 @@ export default function GameBoardClient({
   const [isLoading, setIsLoading] = useState(false);
   const [isGameOver, setIsGameOver] = useState(false);
   const [isWon, setIsWon] = useState(false);
-  const [keyboardState, setKeyboardState] = useState<Map<string, string>>(new Map());
 
   const currentRound = gameState.rounds[0];
   const maxAttempts = MAX_ATTEMPTS;
@@ -163,25 +162,6 @@ export default function GameBoardClient({
         setIsGameOver(true);
       }
     }
-  }, [attempts]);
-
-  // Update keyboard state
-  useEffect(() => {
-    const newKeyboardState = new Map<string, string>();
-    const statusRank: Record<string, number> = { CORRECT: 3, PRESENT: 2, ABSENT: 1 };
-
-    attempts.forEach((attempt: any) => {
-      attempt.result.forEach((r: AttemptResult) => {
-        const currentStatus = newKeyboardState.get(r.letter) || "ABSENT";
-        const currentRank = statusRank[currentStatus];
-        const newRank = statusRank[r.status];
-        if (newRank > currentRank) {
-          newKeyboardState.set(r.letter, r.status);
-        }
-      });
-    });
-
-    setKeyboardState(newKeyboardState);
   }, [attempts]);
 
   const handleSubmitAttempt = async () => {

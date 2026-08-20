@@ -30,7 +30,16 @@ export function WordleKeyboard({
     for (const { result } of attempts) {
       for (const { letter, status } of result) {
         const normalizedLetter = letter.toLowerCase();
-        const currentRank = statusRank[state.get(normalizedLetter) || "absent"];
+        // A letter not yet in the map has no rank at all — NOT the same
+        // as already being recorded "absent". Defaulting the missing case
+        // to rank 1 (absent's own rank) meant a letter whose only
+        // occurrence so far was ABSENT could never pass `newRank >
+        // currentRank` (1 > 1 is false), so it was silently never added to
+        // the map — leaving keys for genuinely-guessed-and-wrong letters
+        // looking identical to never-guessed ones on the keyboard.
+        const currentRank = state.has(normalizedLetter)
+          ? statusRank[state.get(normalizedLetter) as "correct" | "present" | "absent"]
+          : 0;
         const newRank = statusRank[status.toLowerCase() as "correct" | "present" | "absent"];
 
         if (newRank > currentRank) {
