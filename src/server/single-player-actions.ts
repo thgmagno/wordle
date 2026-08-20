@@ -6,7 +6,7 @@ import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 import { checkRateLimit, RATE_LIMIT_CONFIGS } from "@/lib/rate-limit";
 import { evaluateAttempt, MAX_ATTEMPTS } from "@/lib/wordle-evaluation";
-import { getRandomWords, validateAttemptWord } from "@/server/word-service";
+import { getRandomCommonWord, validateAttemptWord } from "@/server/word-service";
 import type { AttemptLetterResult } from "@/types";
 
 /**
@@ -72,7 +72,12 @@ export async function startSinglePlayerGame(
       return { success: true, gameId: existingActive.id };
     }
 
-    const [word] = await getRandomWords(wordLength, 1);
+    // Biased toward common/recognizable words rather than a uniform draw
+    // from the whole dictionary — nobody vouches for the answer's
+    // "does this make sense" the way a human does when submitting a
+    // multiplayer secret word, so an unfiltered draw surfaces obscure
+    // entries too easily. See getRandomCommonWord's own comment for how.
+    const word = await getRandomCommonWord(wordLength);
 
     if (!word) {
       logger.error(

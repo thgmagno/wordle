@@ -51,13 +51,17 @@ export default async function SinglePlayerGamePage({
 
   return (
     <div className="min-h-screen flex flex-col bg-white dark:bg-slate-900">
-      {/* Header */}
+      {/* Header — kept compact (py-2 on mobile) so it doesn't eat into the
+          vertical space the board/keyboard need to fit without scrolling. */}
       <header className="border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900">
-        <div className="container mx-auto px-4 py-4 flex justify-between items-center">
-          <Link href="/dashboard" className="text-2xl font-bold text-blue-600">
+        <div className="container mx-auto px-4 py-2 sm:py-4 flex justify-between items-center">
+          <Link
+            href="/dashboard"
+            className="text-lg sm:text-2xl font-bold text-blue-600"
+          >
             Wordle
           </Link>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 sm:gap-4">
             <span className="text-xs text-slate-600 dark:text-slate-400">
               Modo Solo · {gameState.wordLength} letras
             </span>
@@ -67,7 +71,7 @@ export default async function SinglePlayerGamePage({
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 container mx-auto px-4 py-8 max-w-2xl">
+      <main className="flex-1 container mx-auto px-4 py-2 sm:py-8 max-w-2xl flex flex-col justify-center">
         <SinglePlayerBoardClient gameState={gameState} />
       </main>
     </div>
