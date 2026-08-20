@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { JoinRoomButton } from "@/components/join-room-button";
 import { getUserStatistics } from "@/server/ranking-actions";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 export default async function DashboardPage() {
   const session = await auth();
@@ -23,6 +24,7 @@ export default async function DashboardPage() {
             <span className="text-sm text-slate-600 dark:text-slate-400">
               Bem-vindo, {session.user.name}!
             </span>
+            <ThemeToggle />
             <Link href="/api/auth/signout" className="btn-secondary">
               Sair
             </Link>

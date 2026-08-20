@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 export default function HomePage() {
   return (
@@ -7,7 +8,8 @@ export default function HomePage() {
       <header className="border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900">
         <div className="container mx-auto px-4 py-4 flex justify-between items-center">
           <h1 className="text-2xl font-bold text-blue-600">Wordle</h1>
-          <nav className="flex gap-4">
+          <nav className="flex gap-4 items-center">
+            <ThemeToggle />
             <Link href="/auth/signin" className="btn-secondary">
               Entrar
             </Link>

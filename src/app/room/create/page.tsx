@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createRoom } from "@/server/room-actions";
+import { ThemeToggle } from "@/components/theme-toggle";
 import Link from "next/link";
 
 export default function CreateRoomPage() {
@@ -49,6 +50,9 @@ export default function CreateRoomPage() {
             Wordle
           </Link>
           <span className="text-slate-600 dark:text-slate-400">/ Criar Sala</span>
+          <div className="ml-auto">
+            <ThemeToggle />
+          </div>
         </div>
       </header>
 

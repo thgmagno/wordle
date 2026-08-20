@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth";
 import { getGlobalRanking, getUserRankingPosition } from "@/server/ranking-actions";
 import { LeaderboardTable } from "@/components/leaderboard-table";
+import { ThemeToggle } from "@/components/theme-toggle";
 import Link from "next/link";
 
 export default async function LeaderboardPage() {
@@ -21,7 +22,8 @@ export default async function LeaderboardPage() {
           <Link href="/" className="text-2xl font-bold text-blue-600">
             Wordle
           </Link>
-          <nav>
+          <nav className="flex gap-4 items-center">
+            <ThemeToggle />
             {session ? (
               <Link href="/dashboard" className="btn-secondary">
                 Painel

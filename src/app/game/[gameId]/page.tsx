@@ -3,6 +3,7 @@ import { getGameState } from "@/server/game-actions";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import GameBoardClient from "@/components/game-board-client";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 export default async function GamePage({
   params,
@@ -22,10 +23,11 @@ export default async function GamePage({
     return (
       <div className="min-h-screen flex flex-col">
         <header className="border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900">
-          <div className="container mx-auto px-4 py-4">
+          <div className="container mx-auto px-4 py-4 flex justify-between items-center">
             <Link href="/dashboard" className="text-2xl font-bold text-blue-600">
               Wordle
             </Link>
+            <ThemeToggle />
           </div>
         </header>
 
@@ -53,15 +55,18 @@ export default async function GamePage({
             <Link href="/dashboard" className="text-2xl font-bold text-blue-600">
               Wordle
             </Link>
-            <div className="text-right">
-              <p className="text-xs text-slate-600 dark:text-slate-400">
-                Rodada {gameState.currentRound} de {gameState.totalRounds}
-              </p>
-              {gameState.isSpectator && (
-                <p className="text-sm font-semibold text-orange-600 dark:text-orange-400">
-                  👁️ Modo Espectador
+            <div className="flex items-center gap-4">
+              <div className="text-right">
+                <p className="text-xs text-slate-600 dark:text-slate-400">
+                  Rodada {gameState.currentRound} de {gameState.totalRounds}
                 </p>
-              )}
+                {gameState.isSpectator && (
+                  <p className="text-sm font-semibold text-orange-600 dark:text-orange-400">
+                    👁️ Modo Espectador
+                  </p>
+                )}
+              </div>
+              <ThemeToggle />
             </div>
           </div>
         </div>

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 export default function RulesPage() {
   return (
@@ -9,9 +10,12 @@ export default function RulesPage() {
           <Link href="/" className="text-2xl font-bold text-blue-600">
             Wordle
           </Link>
-          <Link href="/auth/signin" className="btn-secondary">
-            Entrar
-          </Link>
+          <div className="flex items-center gap-4">
+            <ThemeToggle />
+            <Link href="/auth/signin" className="btn-secondary">
+              Entrar
+            </Link>
+          </div>
         </div>
       </header>
 
