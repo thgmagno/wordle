@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { submitAttempt, advanceToNextRound } from "@/server/game-actions";
+import { useGameRealtime } from "@/lib/use-realtime";
 import { WordleGrid } from "./wordle-grid";
 import { WordleKeyboard } from "./wordle-keyboard";
 
@@ -28,6 +29,8 @@ export default function GameBoardClient({
   gameState: GameState;
   currentUserId: string;
 }) {
+  useGameRealtime(gameId);
+
   const [word, setWord] = useState("");
   const [attempts, setAttempts] = useState(gameState.rounds[0]?.attempts || []);
   const [error, setError] = useState<string | null>(null);
@@ -40,6 +43,20 @@ export default function GameBoardClient({
   const currentRound = gameState.rounds[0];
   const maxAttempts = 6;
   const wordLength = 5; // Should come from room, but using default for now
+
+  // Realtime updates re-render this component with a fresh `gameState` prop
+  // instead of remounting it, so local per-round state needs to be reset
+  // explicitly whenever the round actually changes (e.g. the host advanced
+  // to the next round on another client).
+  useEffect(() => {
+    setAttempts(gameState.rounds[0]?.attempts || []);
+    setIsGameOver(false);
+    setIsWon(false);
+    setWord("");
+    setError(null);
+    setSuccess(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gameState.rounds[0]?.id]);
 
   // Check if game is over or won
   useEffect(() => {

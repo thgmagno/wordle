@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { submitWord, startGame, leaveRoom } from "@/server/room-actions";
 import { validateAnswerWordAction } from "@/server/word-actions";
+import { useRoomRealtime } from "@/lib/use-realtime";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -28,6 +29,7 @@ export default function RoomLobbyClient({
   currentUserId: string;
 }) {
   const router = useRouter();
+  useRoomRealtime(roomId);
   const [word, setWord] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);

@@ -6,6 +6,7 @@ import { checkRateLimit, RATE_LIMIT_CONFIGS } from "@/lib/rate-limit";
 import { logger } from "@/lib/logger";
 import { revalidatePath } from "next/cache";
 import { createRound } from "@/server/game-actions";
+import { emitRoomUpdate } from "@/lib/realtime";
 
 /**
  * Create a new game room.
@@ -137,6 +138,7 @@ export async function joinRoom(
 
     logger.info("room", "Usuário entrou na sala", { userId, roomId, participantCount: room.participants.length + 1 }, userId);
     revalidatePath(`/room/${roomId}`);
+    emitRoomUpdate(roomId);
     return { success: true };
   } catch (error) {
     logger.error("room", "Erro ao entrar na sala", error as Error, { userId, roomId }, userId);
@@ -204,6 +206,7 @@ export async function leaveRoom(
 
     logger.info("room", "Usuário saiu da sala", { userId, roomId }, userId);
     revalidatePath(`/room/${roomId}`);
+    emitRoomUpdate(roomId);
     return { success: true };
   } catch (error) {
     logger.error("room", "Erro ao sair da sala", error as Error, { userId, roomId }, userId);
@@ -316,6 +319,7 @@ export async function submitWord(
 
     logger.info("word", "Palavra submetida", { userId, roomId, wordLength: wordText.length }, userId);
     revalidatePath(`/room/${roomId}`);
+    emitRoomUpdate(roomId);
     return { success: true };
   } catch (error) {
     logger.error("word", "Erro ao enviar palavra", error as Error, { userId, roomId }, userId);
@@ -417,6 +421,7 @@ export async function startGame(
 
     logger.info("game", "Jogo iniciado", { roomId, gameId: game.id, participantCount, totalRounds: participantCount }, userId);
     revalidatePath(`/room/${roomId}`);
+    emitRoomUpdate(roomId);
     return { success: true, gameId: game.id };
   } catch (error) {
     logger.error("game", "Erro ao iniciar jogo", error as Error, { roomId }, userId);

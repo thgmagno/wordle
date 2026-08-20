@@ -7,6 +7,7 @@ import { validateAttemptWord } from "@/server/word-service";
 import { checkRateLimit, RATE_LIMIT_CONFIGS } from "@/lib/rate-limit";
 import { logger } from "@/lib/logger";
 import { revalidatePath } from "next/cache";
+import { emitGameUpdate } from "@/lib/realtime";
 
 /**
  * Selects one of the words submitted to a room and creates a Round for it.
@@ -208,6 +209,7 @@ export async function submitAttempt(
     }
 
     revalidatePath(`/game/${round.gameId}`);
+    emitGameUpdate(round.gameId);
 
     return {
       success: true,
@@ -427,6 +429,7 @@ export async function advanceToNextRound(gameId: string): Promise<{
       });
 
       logger.info("game", "Jogo finalizado", { gameId, totalRounds: game.totalRounds }, hostUserId);
+      emitGameUpdate(gameId);
       return { success: true };
     }
 
@@ -451,6 +454,7 @@ export async function advanceToNextRound(gameId: string): Promise<{
 
     logger.info("game", "Nova rodada iniciada", { gameId, roundNumber: nextRoundNumber }, hostUserId);
     revalidatePath(`/game/${gameId}`);
+    emitGameUpdate(gameId);
 
     return { success: true, nextRoundId: nextRound.round.id };
   } catch (error) {

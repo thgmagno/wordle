@@ -102,6 +102,14 @@ This script:
 
 ### Development Server
 
+`npm run dev` and `npm run start` run a custom server (`server.js`) instead
+of the plain `next dev`/`next start`: the App Router alone has no
+long-lived connection to attach WebSockets to, so `server.js` wraps the
+Next.js request handler in a raw Node HTTP server and attaches a Socket.io
+server to the same port. This is what powers the realtime lobby/game
+updates — see `src/lib/realtime.ts` (server-side emit) and
+`src/lib/use-realtime.ts` (client-side subscribe).
+
 Start the development server:
 
 ```bash
@@ -109,6 +117,12 @@ npm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) with your browser.
+
+If you ever need to run without the realtime layer (e.g. a host that can't
+run a custom Node server), set `NEXT_PUBLIC_SOCKET_IO_ENABLED="false"` and
+serve with `next start` directly — the app still works, just without live
+updates; lobby/game data still refreshes on navigation and Server Action
+responses.
 
 ## Project Structure
 
