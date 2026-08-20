@@ -67,16 +67,16 @@ function FinalScoreboard({ results }: { results: MatchResultEntry[] }) {
 }
 
 /**
- * Round/match advancement controls, shared by the spectator and active-
- * player Game Over screens below.
+ * Round advancement controls, shared by the spectator and active-player
+ * Game Over screens below.
  *
- * Reaching the last round is not the same as the match being over: the
- * game record only flips to FINISHED (and match statistics only get
- * finalized) once the host actually triggers that transition — nothing
- * does it automatically. So on the last round this still needs a host
- * action ("Finalizar Partida", wired to the same advanceToNextRound call
- * as "Próxima Rodada") rather than a static dashboard link; the link is
- * only correct once gameState.status itself is already "FINISHED".
+ * This only ever renders for a round that finished but the match hasn't
+ * (gameState.status === "FINISHED" is handled by GameBoardClient's own
+ * early return, before either screen below gets a chance to render this).
+ * Advancing happens automatically the instant a round finishes for
+ * everyone (see submitAttempt/advanceGameInternal) — this button is a
+ * manual fallback for the rare case that doesn't fire, which is why a
+ * non-host only ever sees a waiting message, never a disabled button.
  */
 function RoundAdvanceControls({
   gameState,
@@ -89,19 +89,6 @@ function RoundAdvanceControls({
   isLoading: boolean;
   onAdvance: () => void;
 }) {
-  if (gameState.status === "FINISHED") {
-    return (
-      <div className="space-y-6">
-        {gameState.matchResults && gameState.matchResults.length > 0 && (
-          <FinalScoreboard results={gameState.matchResults} />
-        )}
-        <a href="/dashboard" className="btn-primary">
-          Voltar para Dashboard
-        </a>
-      </div>
-    );
-  }
-
   const isLastRound = gameState.currentRound >= gameState.totalRounds;
 
   if (!isHost) {
@@ -279,6 +266,25 @@ export default function GameBoardClient({
       setWord(word + key);
     }
   };
+
+  // Once the match itself has ended, none of the round UI (grid, keyboard,
+  // input, per-round result) is relevant anymore. With several rounds
+  // played this used to leave the final placar sitting below a full page
+  // of stale board/keyboard content the player had to scroll past — this
+  // replaces the whole screen with just the result instead.
+  if (gameState.status === "FINISHED") {
+    return (
+      <div className="card bg-slate-50 dark:bg-slate-800 text-center space-y-6">
+        <h2 className="text-2xl font-bold">🏁 Partida Encerrada</h2>
+        {gameState.matchResults && gameState.matchResults.length > 0 && (
+          <FinalScoreboard results={gameState.matchResults} />
+        )}
+        <a href="/dashboard" className="btn-primary inline-flex">
+          Voltar para Dashboard
+        </a>
+      </div>
+    );
+  }
 
   if (gameState.isSpectator) {
     const othersProgress: Array<{

@@ -58,9 +58,11 @@ export default async function GamePage({
             <div className="flex items-center gap-4">
               <div className="text-right">
                 <p className="text-xs text-slate-600 dark:text-slate-400">
-                  Rodada {gameState.currentRound} de {gameState.totalRounds}
+                  {gameState.status === "FINISHED"
+                    ? "Partida encerrada"
+                    : `Rodada ${gameState.currentRound} de ${gameState.totalRounds}`}
                 </p>
-                {gameState.isSpectator && (
+                {gameState.isSpectator && gameState.status !== "FINISHED" && (
                   <p className="text-sm font-semibold text-orange-600 dark:text-orange-400">
                     👁️ Modo Espectador
                   </p>
