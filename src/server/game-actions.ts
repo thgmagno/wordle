@@ -12,6 +12,7 @@ import { checkRateLimit, RATE_LIMIT_CONFIGS } from "@/lib/rate-limit";
 import { logger } from "@/lib/logger";
 import { revalidatePath } from "next/cache";
 import { emitGameUpdate } from "@/lib/realtime";
+import { finalizeGameStatistics } from "@/server/ranking-actions";
 
 /**
  * Selects one of the words submitted to a room and creates a Round for it.
@@ -526,6 +527,22 @@ export async function advanceToNextRound(gameId: string): Promise<{
       });
 
       logger.info("game", "Jogo finalizado", { gameId, totalRounds: game.totalRounds }, hostUserId);
+
+      // Compute each player's final placement and fold this match's result
+      // into their global UserStatistics — without this the game record
+      // marks itself FINISHED but the ranking/dashboard/profile never learn
+      // it happened at all.
+      const statsResult = await finalizeGameStatistics(gameId);
+      if (!statsResult.success) {
+        logger.error(
+          "game",
+          "Falha ao finalizar estatísticas do jogo",
+          new Error(statsResult.error || "unknown"),
+          { gameId },
+          hostUserId
+        );
+      }
+
       emitGameUpdate(gameId);
       return { success: true };
     }

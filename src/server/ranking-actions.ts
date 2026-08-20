@@ -280,46 +280,58 @@ export async function finalizeGameStatistics(
         data: { placement },
       });
 
-      // Update user statistics
+      // Update user statistics. This must upsert, not conditionally update:
+      // a player's UserStatistics row is otherwise only ever created lazily
+      // the first time they open the dashboard (see getUserStatistics), so
+      // a first-time player who goes straight from signing in into a game
+      // would have no row yet — a plain "update if exists" would silently
+      // drop their very first match's result instead of recording it.
       const stats = await prisma.userStatistics.findUnique({
         where: { userId: score.userId },
       });
 
-      if (stats) {
-        const newTotal = stats.totalGamesPlayed + 1;
-        const newPoints = stats.totalPoints + score.finalScore;
-        const isWin = placement === 1 ? 1 : 0;
-        const newWins = stats.totalWins + isWin;
-        const newAverageScore = newPoints / newTotal;
-        const newBestScore = Math.max(stats.bestScore, score.finalScore);
+      const isWin = placement === 1 ? 1 : 0;
+      const newTotal = (stats?.totalGamesPlayed ?? 0) + 1;
+      const newPoints = (stats?.totalPoints ?? 0) + score.finalScore;
+      const newWins = (stats?.totalWins ?? 0) + isWin;
+      const newAverageScore = newPoints / newTotal;
+      const newBestScore = Math.max(stats?.bestScore ?? 0, score.finalScore);
 
-        await prisma.userStatistics.update({
-          where: { userId: score.userId },
-          data: {
-            totalGamesPlayed: newTotal,
-            totalWins: newWins,
-            totalPoints: newPoints,
-            averageScore: newAverageScore,
-            bestScore: newBestScore,
-            lastGamePlayedAt: new Date(),
-          },
-        });
+      await prisma.userStatistics.upsert({
+        where: { userId: score.userId },
+        update: {
+          totalGamesPlayed: newTotal,
+          totalWins: newWins,
+          totalPoints: newPoints,
+          averageScore: newAverageScore,
+          bestScore: newBestScore,
+          lastGamePlayedAt: new Date(),
+        },
+        create: {
+          userId: score.userId,
+          totalGamesPlayed: newTotal,
+          totalWins: newWins,
+          totalPoints: newPoints,
+          averageScore: newAverageScore,
+          bestScore: newBestScore,
+          lastGamePlayedAt: new Date(),
+        },
+      });
 
-        logger.info(
-          "game",
-          "Estatísticas finalizadas para usuário",
-          {
-            gameId,
-            userId: score.userId,
-            placement,
-            score: score.finalScore,
-            totalGamesPlayed: newTotal,
-            totalPoints: newPoints,
-            totalWins: newWins,
-          },
-          score.userId
-        );
-      }
+      logger.info(
+        "game",
+        "Estatísticas finalizadas para usuário",
+        {
+          gameId,
+          userId: score.userId,
+          placement,
+          score: score.finalScore,
+          totalGamesPlayed: newTotal,
+          totalPoints: newPoints,
+          totalWins: newWins,
+        },
+        score.userId
+      );
     }
 
     return { success: true };
