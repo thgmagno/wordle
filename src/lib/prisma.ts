@@ -1,29 +1,44 @@
-const { PrismaClient } = require("@prisma/client");
+let prismaInstance: any = null;
 
-const globalWithPrisma = global as typeof globalThis & {
-  prisma?: any;
-};
+function getPrismaClient() {
+  if (prismaInstance) {
+    return prismaInstance;
+  }
 
-function createPrismaClient() {
+  // During build time, Prisma might not be available
+  if (process.env.NODE_ENV === "production" && !process.env.DATABASE_URL) {
+    return null;
+  }
+
   try {
-    if (process.env.DATABASE_URL) {
-      return new PrismaClient({
-        log: process.env.NODE_ENV === "development" ? ["error"] : ["error"],
-      });
-    }
+    const { PrismaClient } = require("@prisma/client");
+
+    prismaInstance = new PrismaClient({
+      log: process.env.NODE_ENV === "development" ? ["error"] : ["error"],
+    });
+
+    return prismaInstance;
   } catch (err) {
-    // Silently fail during build time if DB is not available
     if (process.env.NODE_ENV === "development") {
       console.warn("Warning: Prisma client could not be initialized:", err);
     }
+    return null;
   }
-  return null;
 }
 
-if (!globalWithPrisma.prisma) {
-  globalWithPrisma.prisma = createPrismaClient();
-}
-
-export const prisma = globalWithPrisma.prisma as any;
+export const prisma = new Proxy(
+  {},
+  {
+    get(target, prop) {
+      const client = getPrismaClient();
+      if (!client) {
+        throw new Error(
+          "Prisma client not initialized. Make sure DATABASE_URL is set."
+        );
+      }
+      return (client as any)[prop];
+    },
+  }
+) as any;
 
 export default prisma;
