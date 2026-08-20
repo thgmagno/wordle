@@ -17,6 +17,7 @@ interface RoomInfo {
   host: { id: string; name: string | null; image: string | null };
   participants: any[];
   wordSubmittedBy: string[];
+  gameId: string | null;
 }
 
 export default function RoomLobbyClient({
@@ -30,6 +31,17 @@ export default function RoomLobbyClient({
 }) {
   const router = useRouter();
   useRoomRealtime(roomId);
+
+  // Once the host starts the match, room.gameId becomes available. Players
+  // other than the host only learn about this through a realtime refresh
+  // (see useRoomRealtime), so navigate them straight to the game instead of
+  // leaving them to notice and click a link manually.
+  useEffect(() => {
+    if (room.status === "IN_PROGRESS" && room.gameId) {
+      router.push(`/game/${room.gameId}`);
+    }
+  }, [room.status, room.gameId, router]);
+
   const [word, setWord] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -286,13 +298,17 @@ export default function RoomLobbyClient({
             <div className="card">
               <h3 className="text-2xl font-semibold mb-4">Partida em Progresso</h3>
               <p className="text-slate-600 dark:text-slate-400">
-                Esta partida já começou. Você será redirecionado para o jogo.
+                {room.gameId
+                  ? "Esta partida já começou. Você será redirecionado para o jogo."
+                  : "Esta partida já começou, mas a rodada ainda está sendo preparada."}
               </p>
-              <div className="mt-6">
-                <Link href={`/game/latest?roomId=${roomId}`} className="btn-primary">
-                  Ir para o Jogo
-                </Link>
-              </div>
+              {room.gameId && (
+                <div className="mt-6">
+                  <Link href={`/game/${room.gameId}`} className="btn-primary">
+                    Ir para o Jogo
+                  </Link>
+                </div>
+              )}
             </div>
           )}
         </div>

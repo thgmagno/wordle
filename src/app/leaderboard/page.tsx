@@ -1,5 +1,6 @@
 import { auth } from "@/lib/auth";
 import { getGlobalRanking, getUserRankingPosition } from "@/server/ranking-actions";
+import { LeaderboardTable } from "@/components/leaderboard-table";
 import Link from "next/link";
 
 export default async function LeaderboardPage() {
@@ -64,73 +65,7 @@ export default async function LeaderboardPage() {
           )}
 
           {/* Leaderboard Table */}
-          <div className="card overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-slate-200 dark:border-slate-700">
-                  <th className="px-4 py-3 text-left">Posição</th>
-                  <th className="px-4 py-3 text-left">Jogador</th>
-                  <th className="px-4 py-3 text-right">Partidas</th>
-                  <th className="px-4 py-3 text-right">Vitórias</th>
-                  <th className="px-4 py-3 text-right">Pontuação</th>
-                  <th className="px-4 py-3 text-right">Média</th>
-                </tr>
-              </thead>
-              <tbody>
-                {ranking.items.length > 0 ? (
-                  ranking.items.map((entry: any, index: number) => (
-                    <tr
-                      key={entry.user.id}
-                      className={`border-b border-slate-200 dark:border-slate-700 ${
-                        entry.rank <= 3 ? "bg-yellow-50 dark:bg-yellow-900/10" : ""
-                      }`}
-                    >
-                      <td className="px-4 py-3">
-                        <span className="font-bold text-lg">
-                          {entry.rank === 1 && "🥇"}
-                          {entry.rank === 2 && "🥈"}
-                          {entry.rank === 3 && "🥉"}
-                          {entry.rank > 3 && `#${entry.rank}`}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-3">
-                          {entry.user.image && (
-                            <img
-                              src={entry.user.image}
-                              alt={entry.user.name}
-                              className="w-8 h-8 rounded-full"
-                            />
-                          )}
-                          <span className="font-semibold">
-                            {entry.user.name || "Usuário Anônimo"}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        {entry.statistics.totalGamesPlayed}
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        {entry.statistics.totalWins}
-                      </td>
-                      <td className="px-4 py-3 text-right font-bold text-blue-600 dark:text-blue-400">
-                        {entry.statistics.totalPoints}
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        {entry.statistics.averageScore.toFixed(1)}
-                      </td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan={6} className="px-4 py-8 text-center text-slate-600 dark:text-slate-400">
-                      Nenhum jogador no ranking ainda. Comece a jogar!
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+          <LeaderboardTable items={ranking.items} />
 
           {/* Pagination Info */}
           {ranking.items.length > 0 && (

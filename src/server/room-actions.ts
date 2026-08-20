@@ -246,6 +246,9 @@ export async function getRoomInfo(roomId: string) {
         submittedWords: {
           select: { userId: true },
         },
+        game: {
+          select: { id: true },
+        },
       },
     });
 
@@ -257,6 +260,7 @@ export async function getRoomInfo(roomId: string) {
       ...room,
       participantCount: room.participants.length,
       wordSubmittedBy: room.submittedWords.map((w: any) => w.userId),
+      gameId: room.game?.id ?? null,
     };
   } catch (error) {
     console.error("Error getting room info:", error);
