@@ -30,6 +30,8 @@ model User {
   matchScores           MatchScore[]
   statistics            UserStatistics?
   roundAttempts         RoundAttempt[]
+  singlePlayerGames     SinglePlayerGame[]
+  singlePlayerStatistics SinglePlayerStatistics?
 
   @@index([showInLeaderboard])
 }
@@ -84,6 +86,7 @@ model Word {
   // Relations
   submittedWords SubmittedWord[]
   roundAnswers   Round[]         @relation("RoundAnswer")
+  singlePlayerAnswers SinglePlayerGame[] @relation("SinglePlayerAnswer")
 
   @@index([length])
   @@index([isNegative])
@@ -287,6 +290,79 @@ model UserStatistics {
 
   @@index([totalPoints])
   @@index([averageScore])
+}
+
+// ===== SINGLE PLAYER MODE =====
+//
+// Deliberately separate from Room/Game/Round: a single-player game has no
+// spectator, no other participants, and no lobby — reusing the multiplayer
+// models would mean every query and every security check (e.g. "am I the
+// round's spectator?") would need to special-case a room of one. Its
+// statistics are also kept in their own model (SinglePlayerStatistics)
+// rather than folded into UserStatistics/the global ranking, since a solo
+// practice game and a placement in a competitive multiplayer match aren't
+// the same kind of "win" — mixing them would distort what the leaderboard
+// is supposed to represent.
+
+model SinglePlayerGame {
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId        String   @db.ObjectId
+  wordLength    Int      // 4, 5, or 6
+  // The secret word, resolved once at creation and never sent to the
+  // client until the game is no longer ACTIVE — same rule as Round.
+  answerWordId  String   @db.ObjectId
+  answerWord    String
+  status        SinglePlayerStatus @default(ACTIVE)
+  createdAt     DateTime @default(now())
+  endedAt       DateTime?
+
+  // Relations
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  answerWordRef Word     @relation("SinglePlayerAnswer", fields: [answerWordId], references: [id])
+  attempts      SinglePlayerAttempt[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([userId, status])
+}
+
+enum SinglePlayerStatus {
+  ACTIVE
+  WON
+  LOST
+}
+
+model SinglePlayerAttempt {
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  gameId        String   @db.ObjectId
+  attemptText   String
+  attemptNumber Int
+  result        AttemptResult[]
+  isCorrect     Boolean
+  createdAt     DateTime @default(now())
+
+  // Relations
+  game SinglePlayerGame @relation(fields: [gameId], references: [id], onDelete: Cascade)
+
+  @@index([gameId])
+}
+
+model SinglePlayerStatistics {
+  id                String    @id @default(auto()) @map("_id") @db.ObjectId
+  userId            String    @unique @db.ObjectId
+  totalGamesPlayed  Int       @default(0)
+  totalWins         Int       @default(0)
+  currentStreak     Int       @default(0)
+  bestStreak        Int       @default(0)
+  // Count of wins by attempts used (index 0 = won in 1 attempt, ... index
+  // 5 = won in 6 attempts) — the classic Wordle "guess distribution".
+  guessDistribution Int[]     @default([0, 0, 0, 0, 0, 0])
+  lastPlayedAt      DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 // ===== UTILITY MODELS =====
