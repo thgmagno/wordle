@@ -42,7 +42,15 @@ export async function getGlobalRanking(
           select: { id: true, name: true, image: true },
         },
       },
-      orderBy: [{ totalPoints: "desc" }, { averageScore: "desc" }],
+      // The third key (id) exists purely to break ties deterministically:
+      // without it, two users tied on both totalPoints and averageScore
+      // have no defined relative order, and MongoDB doesn't guarantee one
+      // stays stable across queries. That non-determinism was also what
+      // let this table's row order silently disagree with
+      // getUserRankingPosition below — that function counts users
+      // strictly ahead of a given user, so it needs the exact same
+      // tie-break to ever agree with which row this ranking puts them in.
+      orderBy: [{ totalPoints: "desc" }, { averageScore: "desc" }, { id: "asc" }],
       skip,
       take: limit,
     });
@@ -97,6 +105,10 @@ export async function getUserRankingPosition(userId: string): Promise<number | n
       return null;
     }
 
+    // Must mirror getGlobalRanking's exact ordering — including its `id`
+    // tie-break — or a user tied with someone else on both totalPoints and
+    // averageScore could see a "Sua Posição" that doesn't match the row
+    // they actually appear on in that table.
     const position = await prisma.userStatistics.count({
       where: {
         user: {
@@ -108,6 +120,13 @@ export async function getUserRankingPosition(userId: string): Promise<number | n
             AND: [
               { totalPoints: userStats.totalPoints },
               { averageScore: { gt: userStats.averageScore } },
+            ],
+          },
+          {
+            AND: [
+              { totalPoints: userStats.totalPoints },
+              { averageScore: userStats.averageScore },
+              { id: { lt: userStats.id } },
             ],
           },
         ],
