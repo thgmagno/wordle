@@ -67,8 +67,9 @@ NEXTAUTH_SECRET="generate-a-random-secret"
 GOOGLE_CLIENT_ID="your-client-id"
 GOOGLE_CLIENT_SECRET="your-client-secret"
 
-# WebSocket
-NEXT_PUBLIC_SOCKET_URL="http://localhost:3001"
+# WebSocket (Socket.IO uses the same domain as the app)
+NEXT_PUBLIC_SOCKET_IO_ENABLED="true"
+NEXT_PUBLIC_SOCKET_IO_PATH="/socket.io"
 ```
 
 ### Database Setup
@@ -311,7 +312,8 @@ NEXTAUTH_URL
 NEXTAUTH_SECRET
 GOOGLE_CLIENT_ID
 GOOGLE_CLIENT_SECRET
-NEXT_PUBLIC_SOCKET_URL
+NEXT_PUBLIC_SOCKET_IO_ENABLED
+NEXT_PUBLIC_SOCKET_IO_PATH
 NODE_ENV=production
 ```
 
