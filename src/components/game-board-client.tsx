@@ -45,11 +45,10 @@ interface RoundHintEntry {
 
 /**
  * Read-only board list for every OTHER active player's guesses this
- * round — shared by the spectator's always-visible view and an active
- * player's collapsible "see how everyone else is doing" section below.
- * Seeing a peer's attempts/results doesn't reveal the secret word, only
- * how far along they are: the same information the spectator has always
- * had (see getGameState's comment on `othersProgress`).
+ * round — spectator-only (see getGameState's comment on `othersProgress`
+ * for why active players never receive this data at all: a peer's
+ * winning attempt is an all-CORRECT row, which spells out the secret
+ * word to whoever else can see it before the round is over for them).
  */
 function OthersProgressList({
   players,
@@ -231,11 +230,6 @@ export default function GameBoardClient({
   const currentRound = gameState.rounds[0];
   const maxAttempts = MAX_ATTEMPTS;
   const wordLength = gameState.room.wordLength;
-  // Every OTHER active player's guesses this round — visible to the
-  // spectator (always) and, below, to an active player too, in a
-  // collapsible section (see OthersProgressList's comment for why this is
-  // safe to share with both).
-  const othersProgress: OtherPlayerProgress[] = currentRound?.othersProgress ?? [];
 
   // Realtime updates re-render this component with a fresh `gameState` prop
   // instead of remounting it, so local per-round state needs to be reset
@@ -417,6 +411,8 @@ export default function GameBoardClient({
   }
 
   if (gameState.isSpectator) {
+    const othersProgress: OtherPlayerProgress[] = currentRound?.othersProgress ?? [];
+
     return (
       <div className="space-y-6">
         <div className="card text-center">
@@ -570,25 +566,6 @@ export default function GameBoardClient({
         disabled={isGameOver || isLoading}
         wordLength={wordLength}
       />
-
-      {/* Other players' progress this round — collapsed by default (a
-          native <details>/<summary> instead of extra JS state) so it costs
-          only one line of height on a phone screen with none to spare,
-          while still being discoverable and, once opened, staying open
-          across realtime re-renders since it isn't tied to React state. */}
-      <details className="card">
-        <summary className="cursor-pointer select-none text-sm font-semibold">
-          👥 Tentativas dos outros jogadores
-          {othersProgress.length > 0 && (
-            <span className="ml-1 font-normal text-xs text-slate-500 dark:text-slate-400">
-              ({othersProgress.length})
-            </span>
-          )}
-        </summary>
-        <div className="mt-4">
-          <OthersProgressList players={othersProgress} wordLength={wordLength} maxAttempts={maxAttempts} />
-        </div>
-      </details>
 
       {/* Game Over Screen */}
       {isGameOver && (
