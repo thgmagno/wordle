@@ -137,7 +137,13 @@ export async function joinRoom(
     }
 
     logger.info("room", "Usuário entrou na sala", { userId, roomId, participantCount: room.participants.length + 1 }, userId);
-    revalidatePath(`/room/${roomId}`);
+    // No revalidatePath here: unlike the other actions in this file,
+    // joinRoom is called directly from RoomPage's Server Component render
+    // (auto-join for a visitor opening the room link) rather than from a
+    // client-triggered Server Action — and revalidatePath/revalidateTag
+    // throw when called during render. The current request already gets
+    // fresh data because RoomPage re-fetches getRoomInfo right after this
+    // call; other clients are updated via the websocket emit below.
     emitRoomUpdate(roomId);
     return { success: true };
   } catch (error) {
