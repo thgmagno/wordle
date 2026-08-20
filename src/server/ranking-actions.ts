@@ -172,7 +172,17 @@ export async function getUserStatistics(userId: string): Promise<UserStatistics 
 }
 
 /**
- * Get player profile
+ * Get player profile.
+ *
+ * A user can always fetch their own profile (needed for the dashboard and
+ * the profile page's own stats/settings). Fetching *someone else's*
+ * profile — the public ranking modal — only succeeds when that user has
+ * opted into `showInLeaderboard`; otherwise this returns null, same as if
+ * the user didn't exist. This is what actually enforces "hidden users
+ * never have their data revealed through the ranking modal" (CLAUDE.md
+ * section 10) — the leaderboard query already excludes them from the
+ * list, but without this check anyone who obtained a hidden user's id
+ * could still fetch their stats directly by calling this action.
  */
 export async function getPlayerProfile(userId: string) {
   try {
@@ -183,6 +193,15 @@ export async function getPlayerProfile(userId: string) {
 
     if (!user) {
       return null;
+    }
+
+    if (!user.showInLeaderboard) {
+      const session = await auth();
+      const isOwnProfile = session?.user?.id === userId;
+
+      if (!isOwnProfile) {
+        return null;
+      }
     }
 
     const stats = await getUserStatistics(userId);

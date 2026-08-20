@@ -2,13 +2,16 @@ import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { JoinRoomButton } from "@/components/join-room-button";
+import { getUserStatistics } from "@/server/ranking-actions";
 
 export default async function DashboardPage() {
   const session = await auth();
 
-  if (!session?.user) {
+  if (!session?.user?.id) {
     redirect("/auth/signin");
   }
+
+  const stats = await getUserStatistics(session.user.id);
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -91,30 +94,48 @@ export default async function DashboardPage() {
             <h3 className="text-xl font-semibold mb-6">Minhas Estatísticas</h3>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div className="text-center">
-                <div className="text-3xl font-bold text-blue-600 mb-1">0</div>
+                <div className="text-3xl font-bold text-blue-600 mb-1">
+                  {stats?.totalGamesPlayed ?? 0}
+                </div>
                 <p className="text-sm text-slate-600 dark:text-slate-400">
                   Partidas Jogadas
                 </p>
               </div>
               <div className="text-center">
-                <div className="text-3xl font-bold text-green-600 mb-1">0</div>
+                <div className="text-3xl font-bold text-green-600 mb-1">
+                  {stats?.totalWins ?? 0}
+                </div>
                 <p className="text-sm text-slate-600 dark:text-slate-400">
                   Vitórias
                 </p>
               </div>
               <div className="text-center">
-                <div className="text-3xl font-bold text-purple-600 mb-1">0</div>
+                <div className="text-3xl font-bold text-purple-600 mb-1">
+                  {stats?.totalPoints ?? 0}
+                </div>
                 <p className="text-sm text-slate-600 dark:text-slate-400">
                   Pontuação Total
                 </p>
               </div>
               <div className="text-center">
-                <div className="text-3xl font-bold text-orange-600 mb-1">-</div>
+                <div className="text-3xl font-bold text-orange-600 mb-1">
+                  {stats && stats.totalGamesPlayed > 0 ? stats.bestScore : "-"}
+                </div>
                 <p className="text-sm text-slate-600 dark:text-slate-400">
                   Melhor Pontuação
                 </p>
               </div>
             </div>
+
+            {(!stats || stats.totalGamesPlayed === 0) && (
+              <p className="mt-6 text-center text-sm text-slate-600 dark:text-slate-400">
+                Você ainda não jogou nenhuma partida.{" "}
+                <Link href="/room/create" className="text-blue-600 dark:text-blue-400 hover:underline">
+                  Crie uma sala
+                </Link>{" "}
+                para começar.
+              </p>
+            )}
           </div>
         </div>
       </main>

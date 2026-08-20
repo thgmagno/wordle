@@ -1,30 +1,24 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { updateLeaderboardVisibility } from "@/server/ranking-actions";
 import { signOut } from "next-auth/react";
 
-export default function ProfileClient({ userId }: { userId: string }) {
-  const [showInLeaderboard, setShowInLeaderboard] = useState(true);
+/**
+ * `initialShowInLeaderboard` comes from the server (ProfilePage already
+ * loads the user's own profile to render stats), so this never needs a
+ * separate client-side fetch just to know the current preference — that
+ * previously hit a `/api/user/preferences/[userId]` route that didn't
+ * exist, so the toggle always started from a wrong assumed default.
+ */
+export default function ProfileClient({
+  initialShowInLeaderboard,
+}: {
+  initialShowInLeaderboard: boolean;
+}) {
+  const [showInLeaderboard, setShowInLeaderboard] = useState(initialShowInLeaderboard);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
-
-  // Fetch user preferences
-  useEffect(() => {
-    const fetchPreferences = async () => {
-      try {
-        const response = await fetch(`/api/user/preferences/${userId}`);
-        if (response.ok) {
-          const data = await response.json();
-          setShowInLeaderboard(data.showInLeaderboard !== false);
-        }
-      } catch (err) {
-        console.error("Erro ao carregar preferências:", err);
-      }
-    };
-
-    fetchPreferences();
-  }, [userId]);
 
   const handleToggleLeaderboard = async () => {
     setIsLoading(true);
