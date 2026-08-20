@@ -480,30 +480,33 @@ export async function getGameState(gameId: string) {
 
     const ownAttempts = round.attempts.filter((a: any) => a.userId === userId);
 
-    // The spectator's word is the round's answer, so seeing other players'
-    // guesses (word + correctness pattern) doesn't expose anything they
-    // don't already know — CLAUDE.md section 19 explicitly expects the
-    // spectator to be able to follow along. Grouped per player so the UI
-    // can render one board per active player.
-    let othersProgress:
-      | Array<{
-          user: { id: string; name: string | null; image: string | null };
-          attempts: typeof round.attempts;
-        }>
-      | undefined;
-
-    if (isSpectator) {
-      const byUser = new Map<string, typeof round.attempts>();
-      for (const attempt of round.attempts) {
-        const list = byUser.get(attempt.userId) ?? [];
-        list.push(attempt);
-        byUser.set(attempt.userId, list);
-      }
-      othersProgress = Array.from(byUser.values()).map((playerAttempts) => ({
-        user: playerAttempts[0].user,
-        attempts: playerAttempts,
-      }));
+    // Every other active player's guesses this round (word + correctness
+    // pattern), grouped per player so the UI can render one board per
+    // player. Visible to the spectator (CLAUDE.md section 19 expects them
+    // to be able to follow along — their word is the round's answer, so
+    // this exposes nothing they don't already know) AND to an active
+    // player guessing alongside them: seeing a peer's attempts/results
+    // doesn't reveal the secret word either, only how far along that peer
+    // is — the same information the spectator has always seen. Excluding
+    // `userId`'s own attempts is what makes this safe to compute the same
+    // way for both: the spectator never has any (they're blocked from
+    // submitting — see submitAttempt), so nothing is filtered out for
+    // them, while an active player's own board is already shown
+    // separately via `ownAttempts` and shouldn't be duplicated here.
+    const byUser = new Map<string, typeof round.attempts>();
+    for (const attempt of round.attempts) {
+      if (attempt.userId === userId) continue;
+      const list = byUser.get(attempt.userId) ?? [];
+      list.push(attempt);
+      byUser.set(attempt.userId, list);
     }
+    const othersProgress: Array<{
+      user: { id: string; name: string | null; image: string | null };
+      attempts: typeof round.attempts;
+    }> = Array.from(byUser.values()).map((playerAttempts) => ({
+      user: playerAttempts[0].user,
+      attempts: playerAttempts,
+    }));
 
     // The answer is only safe to reveal once the round is truly over for
     // everyone (round.status flips to FINISHED only once every active

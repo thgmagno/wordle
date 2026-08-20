@@ -33,9 +33,61 @@ interface AttemptResult {
   status: "CORRECT" | "PRESENT" | "ABSENT";
 }
 
+interface OtherPlayerProgress {
+  user: { id: string; name: string | null; image: string | null };
+  attempts: Array<{ attemptText: string; result: AttemptResult[] }>;
+}
+
 interface RoundHintEntry {
   id: string;
   text: string;
+}
+
+/**
+ * Read-only board list for every OTHER active player's guesses this
+ * round — shared by the spectator's always-visible view and an active
+ * player's collapsible "see how everyone else is doing" section below.
+ * Seeing a peer's attempts/results doesn't reveal the secret word, only
+ * how far along they are: the same information the spectator has always
+ * had (see getGameState's comment on `othersProgress`).
+ */
+function OthersProgressList({
+  players,
+  wordLength,
+  maxAttempts,
+}: {
+  players: OtherPlayerProgress[];
+  wordLength: number;
+  maxAttempts: number;
+}) {
+  if (players.length === 0) {
+    return (
+      <p className="text-center text-sm text-slate-600 dark:text-slate-400">
+        Ninguém tentou ainda nesta rodada.
+      </p>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {players.map((player) => (
+        <div key={player.user.id} className="card">
+          <div className="flex items-center gap-2 mb-4">
+            {player.user.image && (
+              <img src={player.user.image} alt="" className="w-6 h-6 rounded-full" />
+            )}
+            <span className="font-semibold">{player.user.name || "Jogador"}</span>
+            <span className="text-xs text-slate-500 dark:text-slate-400">
+              {player.attempts.length}/{maxAttempts} tentativas
+            </span>
+          </div>
+          <div className="flex justify-center">
+            <WordleGrid attempts={player.attempts} wordLength={wordLength} maxAttempts={maxAttempts} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 /**
@@ -179,6 +231,11 @@ export default function GameBoardClient({
   const currentRound = gameState.rounds[0];
   const maxAttempts = MAX_ATTEMPTS;
   const wordLength = gameState.room.wordLength;
+  // Every OTHER active player's guesses this round — visible to the
+  // spectator (always) and, below, to an active player too, in a
+  // collapsible section (see OthersProgressList's comment for why this is
+  // safe to share with both).
+  const othersProgress: OtherPlayerProgress[] = currentRound?.othersProgress ?? [];
 
   // Realtime updates re-render this component with a fresh `gameState` prop
   // instead of remounting it, so local per-round state needs to be reset
@@ -360,11 +417,6 @@ export default function GameBoardClient({
   }
 
   if (gameState.isSpectator) {
-    const othersProgress: Array<{
-      user: { id: string; name: string | null; image: string | null };
-      attempts: Array<{ attemptText: string; result: AttemptResult[] }>;
-    }> = currentRound?.othersProgress ?? [];
-
     return (
       <div className="space-y-6">
         <div className="card text-center">
@@ -423,30 +475,7 @@ export default function GameBoardClient({
           </div>
         )}
 
-        <div className="space-y-6">
-          {othersProgress.length === 0 && (
-            <p className="text-center text-sm text-slate-600 dark:text-slate-400">
-              Ninguém tentou ainda nesta rodada.
-            </p>
-          )}
-
-          {othersProgress.map((player) => (
-            <div key={player.user.id} className="card">
-              <div className="flex items-center gap-2 mb-4">
-                {player.user.image && (
-                  <img src={player.user.image} alt="" className="w-6 h-6 rounded-full" />
-                )}
-                <span className="font-semibold">{player.user.name || "Jogador"}</span>
-                <span className="text-xs text-slate-500 dark:text-slate-400">
-                  {player.attempts.length}/{maxAttempts} tentativas
-                </span>
-              </div>
-              <div className="flex justify-center">
-                <WordleGrid attempts={player.attempts} wordLength={wordLength} maxAttempts={maxAttempts} />
-              </div>
-            </div>
-          ))}
-        </div>
+        <OthersProgressList players={othersProgress} wordLength={wordLength} maxAttempts={maxAttempts} />
 
         {error && <Toast message={error} type="error" onDismiss={() => setError(null)} />}
         {success && <Toast message={success} type="success" onDismiss={() => setSuccess(null)} />}
@@ -532,6 +561,25 @@ export default function GameBoardClient({
         disabled={isGameOver || isLoading}
         wordLength={wordLength}
       />
+
+      {/* Other players' progress this round — collapsed by default (a
+          native <details>/<summary> instead of extra JS state) so it costs
+          only one line of height on a phone screen with none to spare,
+          while still being discoverable and, once opened, staying open
+          across realtime re-renders since it isn't tied to React state. */}
+      <details className="card">
+        <summary className="cursor-pointer select-none text-sm font-semibold">
+          👥 Tentativas dos outros jogadores
+          {othersProgress.length > 0 && (
+            <span className="ml-1 font-normal text-xs text-slate-500 dark:text-slate-400">
+              ({othersProgress.length})
+            </span>
+          )}
+        </summary>
+        <div className="mt-4">
+          <OthersProgressList players={othersProgress} wordLength={wordLength} maxAttempts={maxAttempts} />
+        </div>
+      </details>
 
       {/* Game Over Screen */}
       {isGameOver && (
