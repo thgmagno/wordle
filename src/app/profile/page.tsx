@@ -99,7 +99,7 @@ export default async function ProfilePage() {
                   </div>
                 </div>
 
-                {stats && stats.totalGamesPlayed && stats.totalGamesPlayed > 0 && (
+                {stats && stats.totalGamesPlayed > 0 && (
                   <div className="bg-slate-50 dark:bg-slate-700 p-4 rounded-lg">
                     <div className="grid grid-cols-2 gap-4">
                       <div>
