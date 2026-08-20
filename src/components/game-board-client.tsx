@@ -13,6 +13,7 @@ interface GameState {
   totalRounds: number;
   isSpectator: boolean;
   rounds: any[];
+  room: { wordLength: number };
 }
 
 interface AttemptResult {
@@ -42,7 +43,7 @@ export default function GameBoardClient({
 
   const currentRound = gameState.rounds[0];
   const maxAttempts = 6;
-  const wordLength = 5; // Should come from room, but using default for now
+  const wordLength = gameState.room.wordLength;
 
   // Realtime updates re-render this component with a fresh `gameState` prop
   // instead of remounting it, so local per-round state needs to be reset
