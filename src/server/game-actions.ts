@@ -245,11 +245,38 @@ export async function submitAttempt(
     const allPlayersDone = haveAllPlayersFinishedRound(activePlayerIds, attemptsByUser);
 
     if (allPlayersDone) {
-      await prisma.round.update({
-        where: { id: roundId },
+      // Atomic guard: only the request that actually flips the round from
+      // ACTIVE to FINISHED proceeds to auto-advance the match. Two
+      // players' final attempts can land close enough together that both
+      // reads of "is everyone done?" come back true — without this,
+      // both would call advanceGameInternal concurrently for the same
+      // transition. (Game.roomId and Round[gameId,roundNumber] being
+      // @unique already stop that from corrupting anything, but this
+      // avoids relying on that as the only line of defense.)
+      const roundFinishResult = await prisma.round.updateMany({
+        where: { id: roundId, status: "ACTIVE" },
         data: { status: "FINISHED", endedAt: new Date() },
       });
-      logger.info("game", "Rodada finalizada — todos os jogadores concluíram", { roundId, gameId: round.gameId }, userId);
+
+      if (roundFinishResult.count > 0) {
+        logger.info("game", "Rodada finalizada — todos os jogadores concluíram", { roundId, gameId: round.gameId }, userId);
+
+        // Auto-advance: once a round is genuinely over for everyone,
+        // there's no reason to make every player wait on the host to
+        // click "Próxima Rodada"/"Finalizar Partida" — see
+        // advanceGameInternal. A failure here doesn't affect this
+        // player's own attempt, which already succeeded above.
+        const advanceResult = await advanceGameInternal(round.gameId, userId);
+        if (!advanceResult.success) {
+          logger.error(
+            "game",
+            "Falha ao avançar automaticamente após o fim da rodada",
+            new Error(advanceResult.error || "unknown"),
+            { roundId, gameId: round.gameId },
+            userId
+          );
+        }
+      }
     }
 
     revalidatePath(`/game/${round.gameId}`);
@@ -503,22 +530,17 @@ export async function getUserAttempts(roundId: string) {
 }
 
 /**
- * Advance to next round.
- * Only the host (the currently authenticated user, verified against the
- * room's hostId — never a client-supplied id) can advance rounds.
+ * Shared core of round/match advancement. Used by both the host-triggered
+ * advanceToNextRound Server Action and the automatic advancement that
+ * fires the instant a round finishes (see submitAttempt) — the host's
+ * "Próxima Rodada"/"Finalizar Partida" button is a manual fallback here,
+ * not the only path: once every active player has actually finished a
+ * round, there's no reason to make everyone wait on a click.
  */
-export async function advanceToNextRound(gameId: string): Promise<{
-  success: boolean;
-  nextRoundId?: string;
-  error?: string;
-}> {
-  const session = await auth();
-  const hostUserId = session?.user?.id;
-
-  if (!hostUserId) {
-    return { success: false, error: "Você precisa estar autenticado" };
-  }
-
+async function advanceGameInternal(
+  gameId: string,
+  actorUserId?: string
+): Promise<{ success: boolean; nextRoundId?: string; error?: string }> {
   try {
     const game = await prisma.game.findUnique({
       where: { id: gameId },
@@ -529,17 +551,12 @@ export async function advanceToNextRound(gameId: string): Promise<{
       return { success: false, error: "Jogo não encontrado" };
     }
 
-    if (game.room.hostId !== hostUserId) {
-      logger.warn("security", "Non-host attempted to advance round", { userId: hostUserId, gameId }, hostUserId);
-      return { success: false, error: "Only the host can advance rounds" };
-    }
-
     if (game.status === "FINISHED") {
       return { success: false, error: "Game is already finished" };
     }
 
     // The round only finishes on its own once every active player has
-    // solved it or used all attempts (see submitAttempt) — the host can't
+    // solved it or used all attempts (see submitAttempt) — nothing may
     // cut that short by advancing early and leaving others mid-guess.
     const currentRound = await prisma.round.findUnique({
       where: { gameId_roundNumber: { gameId, roundNumber: game.currentRound } },
@@ -553,14 +570,22 @@ export async function advanceToNextRound(gameId: string): Promise<{
     const nextRoundNumber = game.currentRound + 1;
 
     if (nextRoundNumber > game.totalRounds) {
-      // Game finished
-      await prisma.game.update({
-        where: { id: gameId },
-        data: {
-          status: "FINISHED",
-          endedAt: new Date(),
-        },
+      // Game finished. Atomic guard: only the caller that actually flips
+      // the game from non-FINISHED to FINISHED proceeds to finalize
+      // statistics — Game has no unique constraint protecting against two
+      // concurrent callers both reaching this branch (e.g. the automatic
+      // trigger from submitAttempt and a host clicking "Finalizar Partida"
+      // at nearly the same instant), and finalizeGameStatistics is *not*
+      // idempotent — it increments totalGamesPlayed/totalPoints, so
+      // running it twice for the same match would double-count.
+      const finishResult = await prisma.game.updateMany({
+        where: { id: gameId, status: { not: "FINISHED" } },
+        data: { status: "FINISHED", endedAt: new Date() },
       });
+
+      if (finishResult.count === 0) {
+        return { success: false, error: "Game is already finished" };
+      }
 
       await prisma.room.update({
         where: { id: game.roomId },
@@ -570,7 +595,7 @@ export async function advanceToNextRound(gameId: string): Promise<{
         },
       });
 
-      logger.info("game", "Jogo finalizado", { gameId, totalRounds: game.totalRounds }, hostUserId);
+      logger.info("game", "Jogo finalizado", { gameId, totalRounds: game.totalRounds }, actorUserId);
 
       // Compute each player's final placement and fold this match's result
       // into their global UserStatistics — without this the game record
@@ -583,7 +608,7 @@ export async function advanceToNextRound(gameId: string): Promise<{
           "Falha ao finalizar estatísticas do jogo",
           new Error(statsResult.error || "unknown"),
           { gameId },
-          hostUserId
+          actorUserId
         );
       }
 
@@ -610,13 +635,49 @@ export async function advanceToNextRound(gameId: string): Promise<{
       data: { currentRound: nextRoundNumber },
     });
 
-    logger.info("game", "Nova rodada iniciada", { gameId, roundNumber: nextRoundNumber }, hostUserId);
+    logger.info("game", "Nova rodada iniciada", { gameId, roundNumber: nextRoundNumber }, actorUserId);
     revalidatePath(`/game/${gameId}`);
     emitGameUpdate(gameId);
 
     return { success: true, nextRoundId: nextRound.round.id };
   } catch (error) {
-    logger.error("game", "Erro ao avançar rodada", error as Error, { gameId }, hostUserId);
+    logger.error("game", "Erro ao avançar rodada", error as Error, { gameId }, actorUserId);
     return { success: false, error: "Falha ao avançar rodada" };
   }
+}
+
+/**
+ * Advance to next round.
+ * Only the host (the currently authenticated user, verified against the
+ * room's hostId — never a client-supplied id) can advance manually — kept
+ * as a fallback for the rare case where the automatic advancement (see
+ * submitAttempt) doesn't fire for some reason.
+ */
+export async function advanceToNextRound(gameId: string): Promise<{
+  success: boolean;
+  nextRoundId?: string;
+  error?: string;
+}> {
+  const session = await auth();
+  const hostUserId = session?.user?.id;
+
+  if (!hostUserId) {
+    return { success: false, error: "Você precisa estar autenticado" };
+  }
+
+  const game = await prisma.game.findUnique({
+    where: { id: gameId },
+    select: { room: { select: { hostId: true } } },
+  });
+
+  if (!game) {
+    return { success: false, error: "Jogo não encontrado" };
+  }
+
+  if (game.room.hostId !== hostUserId) {
+    logger.warn("security", "Non-host attempted to advance round", { userId: hostUserId, gameId }, hostUserId);
+    return { success: false, error: "Only the host can advance rounds" };
+  }
+
+  return advanceGameInternal(gameId, hostUserId);
 }

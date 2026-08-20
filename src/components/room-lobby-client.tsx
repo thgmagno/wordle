@@ -264,17 +264,25 @@ export default function RoomLobbyClient({
                 </div>
               )}
 
-              {/* Start Game Button (Host Only) */}
+              {/* Start Game Button (Host Only). The match actually starts
+                  automatically the instant every participant has a word in
+                  (see submitWord's auto-start) — this button is a manual
+                  fallback for the rare case that doesn't fire, so it's
+                  expected to rarely need clicking in practice. */}
               {isHost && (
                 <div className="card mb-6 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
                   <h3 className="text-lg font-semibold mb-4 text-blue-800 dark:text-blue-300">
                     Controles do Anfitrião
                   </h3>
 
-                  {!allPlayersSubmitted && (
+                  {!allPlayersSubmitted ? (
                     <p className="text-sm text-blue-700 dark:text-blue-400 mb-4">
                       Aguardando {room.participantCount - room.wordSubmittedBy.length} participante(s)
-                      para enviar palavras...
+                      para enviar palavras... A partida começa automaticamente assim que todos enviarem.
+                    </p>
+                  ) : (
+                    <p className="text-sm text-blue-700 dark:text-blue-400 mb-4">
+                      Todos enviaram suas palavras — a partida vai começar em instantes.
                     </p>
                   )}
 
@@ -287,7 +295,7 @@ export default function RoomLobbyClient({
                     }
                     className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-400 text-white font-semibold py-3 rounded-lg transition-colors disabled:cursor-not-allowed"
                   >
-                    {isLoading ? "Iniciando..." : "Iniciar Partida"}
+                    {isLoading ? "Iniciando..." : "Iniciar Partida Agora"}
                   </button>
 
                   {room.participantCount < 2 && (

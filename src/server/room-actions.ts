@@ -385,6 +385,33 @@ export async function submitWord(
     logger.info("word", "Palavra submetida", { userId, roomId, wordLength: wordText.length }, userId);
     revalidatePath(`/room/${room.code}`);
     emitRoomUpdate(room.code);
+
+    // Auto-start: once every current participant has a word in, there's no
+    // real reason to make everyone wait on the host to click "Iniciar
+    // Partida" — see startGameInternal. Two players submitting their final
+    // word at nearly the same time can both observe "everyone's in" and
+    // both attempt this; that's harmless because Game.roomId is @unique,
+    // so at most one of the concurrent prisma.game.create calls actually
+    // succeeds and the other fails cleanly (logged, not surfaced to this
+    // player — their own word submission still succeeded).
+    const activeParticipantCount = await prisma.roomParticipant.count({
+      where: { roomId, status: "ACTIVE" },
+    });
+    const totalSubmittedCount = await prisma.submittedWord.count({ where: { roomId } });
+
+    if (activeParticipantCount >= 2 && totalSubmittedCount >= activeParticipantCount) {
+      const startResult = await startGameInternal(roomId, userId);
+      if (!startResult.success) {
+        logger.error(
+          "game",
+          "Falha ao iniciar partida automaticamente após envio de palavra",
+          new Error(startResult.error || "unknown"),
+          { roomId },
+          userId
+        );
+      }
+    }
+
     return { success: true };
   } catch (error) {
     logger.error("word", "Erro ao enviar palavra", error as Error, { userId, roomCode }, userId);
@@ -393,25 +420,20 @@ export async function submitWord(
 }
 
 /**
- * Start the game.
- * Only the host (the currently authenticated user, verified against the
- * room's hostId — never a client-supplied id) can start, and all
- * participants must have submitted words.
+ * Shared core of match creation. Used by both the host-triggered startGame
+ * Server Action and the automatic start that fires the instant every
+ * participant has submitted a word (see submitWord) — the host's "Iniciar
+ * Partida" button is a manual fallback here, not the only path: once every
+ * current participant has a word in, there's no reason to make everyone
+ * wait on a click.
  */
-export async function startGame(
-  roomCode: string
+async function startGameInternal(
+  roomId: string,
+  actorUserId?: string
 ): Promise<{ success: boolean; gameId?: string; error?: string }> {
-  const session = await auth();
-  const userId = session?.user?.id;
-
-  if (!userId) {
-    return { success: false, error: "Você precisa estar autenticado" };
-  }
-
   try {
-    // Verify user is host
     const room = await prisma.room.findUnique({
-      where: { code: normalizeRoomCode(roomCode) },
+      where: { id: roomId },
       include: {
         participants: { where: { status: "ACTIVE" } },
         submittedWords: true,
@@ -420,13 +442,6 @@ export async function startGame(
 
     if (!room) {
       return { success: false, error: "Sala não encontrada" };
-    }
-
-    const roomId = room.id;
-
-    if (room.hostId !== userId) {
-      logger.warn("security", "Non-host attempted to start game", { userId, roomId }, userId);
-      return { success: false, error: "Apenas o anfitrião pode iniciar o jogo" };
     }
 
     if (room.status !== "LOBBY") {
@@ -472,7 +487,7 @@ export async function startGame(
         "Falha ao criar a primeira rodada",
         new Error(firstRound.error || "unknown"),
         { roomId, gameId: game.id },
-        userId
+        actorUserId
       );
       return { success: false, error: firstRound.error || "Falha ao criar a primeira rodada" };
     }
@@ -486,10 +501,50 @@ export async function startGame(
       },
     });
 
-    logger.info("game", "Jogo iniciado", { roomId, gameId: game.id, participantCount, totalRounds: participantCount }, userId);
+    logger.info("game", "Jogo iniciado", { roomId, gameId: game.id, participantCount, totalRounds: participantCount }, actorUserId);
     revalidatePath(`/room/${room.code}`);
     emitRoomUpdate(room.code);
     return { success: true, gameId: game.id };
+  } catch (error) {
+    logger.error("game", "Erro ao iniciar jogo", error as Error, { roomId }, actorUserId);
+    return { success: false, error: "Falha ao iniciar o jogo" };
+  }
+}
+
+/**
+ * Start the game.
+ * Only the host (the currently authenticated user, verified against the
+ * room's hostId — never a client-supplied id) can start manually — kept as
+ * a fallback for the rare case where the automatic start (see submitWord)
+ * doesn't fire for some reason. All participants must have submitted
+ * words, same as the automatic path.
+ */
+export async function startGame(
+  roomCode: string
+): Promise<{ success: boolean; gameId?: string; error?: string }> {
+  const session = await auth();
+  const userId = session?.user?.id;
+
+  if (!userId) {
+    return { success: false, error: "Você precisa estar autenticado" };
+  }
+
+  try {
+    const room = await prisma.room.findUnique({
+      where: { code: normalizeRoomCode(roomCode) },
+      select: { id: true, hostId: true },
+    });
+
+    if (!room) {
+      return { success: false, error: "Sala não encontrada" };
+    }
+
+    if (room.hostId !== userId) {
+      logger.warn("security", "Non-host attempted to start game", { userId, roomId: room.id }, userId);
+      return { success: false, error: "Apenas o anfitrião pode iniciar o jogo" };
+    }
+
+    return await startGameInternal(room.id, userId);
   } catch (error) {
     logger.error("game", "Erro ao iniciar jogo", error as Error, { roomCode }, userId);
     return { success: false, error: "Falha ao iniciar o jogo" };
