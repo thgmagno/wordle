@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { submitWord, startGame, leaveRoom } from "@/server/room-actions";
 import { validateAnswerWordAction } from "@/server/word-actions";
 import { useRoomRealtime } from "@/lib/use-realtime";
+import { RoomCodeShare } from "@/components/room-code-share";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -146,6 +147,7 @@ export default function RoomLobbyClient({
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
                   Compartilhe este código para outros jogadores entrarem.
                 </p>
+                <RoomCodeShare code={roomId} />
               </div>
               <div>
                 <p className="text-slate-600 dark:text-slate-400">Tamanho da Palavra</p>
