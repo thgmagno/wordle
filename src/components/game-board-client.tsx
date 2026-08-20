@@ -387,32 +387,30 @@ export default function GameBoardClient({
         </div>
       )}
 
-      {/* Input */}
+      {/* Attempt counter — the current attempt itself is shown as tiles in
+          the grid above (WordleGrid's currentAttempt prop), not in a text
+          field, so there's nothing focusable here to trigger a mobile
+          on-screen keyboard. */}
       {!isGameOver && (
-        <div className="card">
-          <div className="flex gap-2 mb-4">
-            <input
-              type="text"
-              value={word}
-              onChange={(e) => setWord(e.target.value.toLowerCase().slice(0, wordLength))}
-              maxLength={wordLength}
-              placeholder="Digite sua tentativa..."
-              className="flex-1 px-4 py-3 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 uppercase text-center text-2xl font-bold tracking-widest"
-              disabled={isLoading}
-              autoFocus
-            />
-            <button
-              onClick={handleSubmitAttempt}
-              disabled={isLoading || word.length !== wordLength}
-              className="bg-blue-600 hover:bg-blue-700 disabled:bg-slate-400 text-white font-semibold px-6 py-3 rounded-lg transition-colors disabled:cursor-not-allowed"
-            >
-              {isLoading ? "..." : "Enviar"}
-            </button>
-          </div>
-          <p className="text-xs text-slate-600 dark:text-slate-400 text-center">
-            Tentativas: {attempts.length}/{maxAttempts}
-          </p>
-        </div>
+        <p className="text-xs text-slate-600 dark:text-slate-400 text-center">
+          Tentativas: {attempts.length}/{maxAttempts}
+        </p>
+      )}
+
+      {/* Submit button, positioned above the keyboard rather than inline
+          with a text input: typing happens exclusively through
+          WordleKeyboard below (its on-screen buttons or a physical
+          keyboard) — there is intentionally no focusable text input on this
+          screen, so the native mobile keyboard never has anything to pop
+          up for. */}
+      {!isGameOver && (
+        <button
+          onClick={handleSubmitAttempt}
+          disabled={isLoading || word.length !== wordLength}
+          className="w-full max-w-2xl mx-auto block bg-blue-600 hover:bg-blue-700 disabled:bg-slate-400 text-white font-semibold py-3 rounded-lg transition-colors disabled:cursor-not-allowed"
+        >
+          {isLoading ? "Enviando..." : "Enviar"}
+        </button>
       )}
 
       {/* Keyboard */}

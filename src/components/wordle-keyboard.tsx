@@ -77,25 +77,22 @@ export function WordleKeyboard({
   };
 
   return (
-    <div className="flex flex-col gap-2 w-full max-w-2xl mx-auto px-2">
+    // Every key is flex-1 within its own row (share of that row's width)
+    // instead of a fixed/content-based size: 10 keys plus their gaps
+    // otherwise don't reliably fit a narrow phone's viewport and overflow
+    // horizontally. Submitting is handled entirely by the standalone
+    // "Enviar" button above this keyboard (and the physical Enter key,
+    // still bound below) — there's no on-screen Enter key here to keep the
+    // letter rows visually consistent with the rest of the row.
+    <div className="flex flex-col gap-1.5 w-full max-w-2xl mx-auto px-1 sm:px-2">
       {KEYBOARD_ROWS.map((row, rowIndex) => (
-        <div key={rowIndex} className="flex gap-1 justify-center">
-          {rowIndex === KEYBOARD_ROWS.length - 1 && (
-            <button
-              onClick={() => onKeyPress("enter")}
-              disabled={disabled}
-              className="keyboard-key px-4 flex-grow"
-            >
-              Enter
-            </button>
-          )}
-
+        <div key={rowIndex} className="flex gap-1 sm:gap-1.5 justify-center">
           {row.map((key) => (
             <button
               key={key}
               onClick={() => onKeyPress(key)}
               disabled={disabled}
-              className={getKeyClass(key)}
+              className={`${getKeyClass(key)} flex-1 min-w-0 max-w-10 sm:max-w-12`}
             >
               {key.toUpperCase()}
             </button>
@@ -105,9 +102,10 @@ export function WordleKeyboard({
             <button
               onClick={() => onKeyPress("backspace")}
               disabled={disabled}
-              className="keyboard-key px-4 flex-grow"
+              aria-label="Apagar letra"
+              className="keyboard-key flex-[1.5] min-w-0 max-w-16 sm:max-w-20 px-1"
             >
-              ← Back
+              ⌫
             </button>
           )}
         </div>
