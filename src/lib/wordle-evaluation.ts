@@ -1,0 +1,186 @@
+import type { AttemptLetterResult } from "@/types";
+import {
+  getCharacterFrequency,
+  normalizeWord,
+} from "./word-normalization";
+
+/**
+ * Evaluates a Wordle attempt against the answer word
+ * Correctly handles repeated letters according to Wordle rules
+ */
+export function evaluateAttempt(
+  attempt: string,
+  answer: string
+): AttemptLetterResult[] {
+  const normalizedAttempt = normalizeWord(attempt);
+  const normalizedAnswer = normalizeWord(answer);
+
+  if (normalizedAttempt.length !== normalizedAnswer.length) {
+    throw new Error(
+      `Attempt and answer must have the same length. Attempt: ${normalizedAttempt.length}, Answer: ${normalizedAnswer.length}`
+    );
+  }
+
+  const length = normalizedAnswer.length;
+  const result: AttemptLetterResult[] = Array(length).fill(null);
+  const answerCharFrequency = getCharacterFrequency(normalizedAnswer);
+  const remainingFrequency = new Map(answerCharFrequency);
+
+  // First pass: Mark CORRECT (green) letters
+  for (let i = 0; i < length; i++) {
+    const attemptChar = normalizedAttempt[i];
+    const answerChar = normalizedAnswer[i];
+
+    if (attemptChar === answerChar) {
+      result[i] = {
+        letter: normalizedAttempt[i],
+        status: "CORRECT",
+      };
+      remainingFrequency.set(attemptChar, (remainingFrequency.get(attemptChar) || 0) - 1);
+    }
+  }
+
+  // Second pass: Mark PRESENT (yellow) and ABSENT (gray) letters
+  for (let i = 0; i < length; i++) {
+    if (result[i] !== null) continue; // Already marked as CORRECT
+
+    const attemptChar = normalizedAttempt[i];
+    const remainingCount = remainingFrequency.get(attemptChar) || 0;
+
+    if (remainingCount > 0) {
+      result[i] = {
+        letter: normalizedAttempt[i],
+        status: "PRESENT",
+      };
+      remainingFrequency.set(attemptChar, remainingCount - 1);
+    } else {
+      result[i] = {
+        letter: normalizedAttempt[i],
+        status: "ABSENT",
+      };
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Check if an attempt is correct
+ */
+export function isAttemptCorrect(
+  attempt: string,
+  answer: string
+): boolean {
+  const result = evaluateAttempt(attempt, answer);
+  return result.every((r) => r.status === "CORRECT");
+}
+
+/**
+ * Get keyboard state after an attempt
+ * Maps each character to its best status (CORRECT > PRESENT > ABSENT)
+ */
+export function getKeyboardState(
+  attempts: Array<{ attemptText: string; result: AttemptLetterResult[] }>
+): Map<string, "CORRECT" | "PRESENT" | "ABSENT"> {
+  const keyboardState = new Map<string, "CORRECT" | "PRESENT" | "ABSENT">();
+  const statusRank = { CORRECT: 3, PRESENT: 2, ABSENT: 1 };
+
+  for (const { result } of attempts) {
+    for (const { letter, status } of result) {
+      const currentRank = statusRank[keyboardState.get(letter) || "ABSENT"];
+      const newRank = statusRank[status];
+
+      if (newRank > currentRank) {
+        keyboardState.set(letter, status);
+      }
+    }
+  }
+
+  return keyboardState;
+}
+
+/**
+ * Validate if a word can be used as an answer
+ * (should be in dictionary, not negative, correct length)
+ */
+export function canUseAsAnswerWord(
+  word: string,
+  options: {
+    isInDictionary: boolean;
+    isNegative: boolean;
+    expectedLength: number;
+  }
+): { valid: boolean; error?: string } {
+  const normalizedWord = normalizeWord(word);
+
+  if (normalizedWord.length !== options.expectedLength) {
+    return {
+      valid: false,
+      error: `Word must have exactly ${options.expectedLength} letters`,
+    };
+  }
+
+  if (!options.isInDictionary) {
+    return {
+      valid: false,
+      error: "Word is not in the dictionary",
+    };
+  }
+
+  if (options.isNegative) {
+    return {
+      valid: false,
+      error: "Word cannot be used (blocked word)",
+    };
+  }
+
+  return { valid: true };
+}
+
+/**
+ * Validate if a word can be used as an attempt
+ */
+export function canUseAsAttemptWord(
+  word: string,
+  options: {
+    isInDictionary: boolean;
+    isNegative: boolean;
+    expectedLength: number;
+    previousAttempts?: string[];
+  }
+): { valid: boolean; error?: string } {
+  const normalizedWord = normalizeWord(word);
+
+  if (normalizedWord.length !== options.expectedLength) {
+    return {
+      valid: false,
+      error: `Word must have exactly ${options.expectedLength} letters`,
+    };
+  }
+
+  if (!options.isInDictionary) {
+    return {
+      valid: false,
+      error: "Word is not in the dictionary",
+    };
+  }
+
+  if (options.isNegative) {
+    return {
+      valid: false,
+      error: "Word cannot be used (blocked word)",
+    };
+  }
+
+  if (options.previousAttempts) {
+    const previousNormalized = options.previousAttempts.map((a) => normalizeWord(a));
+    if (previousNormalized.includes(normalizedWord)) {
+      return {
+        valid: false,
+        error: "You already tried this word",
+      };
+    }
+  }
+
+  return { valid: true };
+}
