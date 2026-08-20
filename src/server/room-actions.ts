@@ -87,10 +87,13 @@ export async function joinRoom(
       return { success: false, error: "Room ID is required" };
     }
 
-    // Check if room exists and is in LOBBY status
+    // Check if room exists and is in LOBBY status. Only ACTIVE participants
+    // count toward capacity — a room that has had cumulative join/leave
+    // churn shouldn't reject new players just because old LEFT rows still
+    // exist (getRoomInfo already filters the same way for display).
     const room = await prisma.room.findUnique({
       where: { id: roomId },
-      include: { participants: true },
+      include: { participants: { where: { status: "ACTIVE" } } },
     });
 
     if (!room) {
