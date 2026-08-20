@@ -3,6 +3,7 @@ import { getPlayerProfile } from "@/server/ranking-actions";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import ProfileClient from "@/components/profile-client";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 export default async function ProfilePage() {
   const session = await auth();
@@ -25,9 +26,12 @@ export default async function ProfilePage() {
           <Link href="/dashboard" className="text-2xl font-bold text-blue-600">
             Wordle
           </Link>
-          <span className="text-sm text-slate-600 dark:text-slate-400">
-            Meu Perfil
-          </span>
+          <div className="flex items-center gap-4">
+            <span className="text-sm text-slate-600 dark:text-slate-400">
+              Meu Perfil
+            </span>
+            <ThemeToggle />
+          </div>
         </div>
       </header>
 

@@ -4,15 +4,17 @@ import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import Link from "next/link";
 import RoomLobbyClient from "@/components/room-lobby-client";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 function RoomShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen flex flex-col">
       <header className="border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900">
-        <div className="container mx-auto px-4 py-4">
+        <div className="container mx-auto px-4 py-4 flex justify-between items-center">
           <Link href="/dashboard" className="text-2xl font-bold text-blue-600">
             Wordle
           </Link>
+          <ThemeToggle />
         </div>
       </header>
 
@@ -134,9 +136,12 @@ export default async function RoomPage({
           <Link href="/dashboard" className="text-2xl font-bold text-blue-600">
             Wordle
           </Link>
-          <span className="text-sm text-slate-600 dark:text-slate-400">
-            Sala: {roomId.substring(0, 8)}...
-          </span>
+          <div className="flex items-center gap-4">
+            <span className="text-sm text-slate-600 dark:text-slate-400">
+              Sala: {roomId.substring(0, 8)}...
+            </span>
+            <ThemeToggle />
+          </div>
         </div>
       </header>
 

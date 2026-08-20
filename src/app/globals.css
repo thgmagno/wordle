@@ -1,5 +1,17 @@
 @import "tailwindcss";
 
+/*
+ * Tailwind v4's `dark:` variant defaults to `@media (prefers-color-scheme:
+ * dark)`, which ignores the `.dark`/`.light` class next-themes applies to
+ * <html> (ThemeProvider attribute="class" in providers.tsx). Without this,
+ * every `dark:` utility across the app would only ever follow the OS
+ * setting, and ThemeToggle's manual override would have zero visual
+ * effect. next-themes already resolves "system" into an explicit class
+ * itself, so switching the variant to the class is a strict upgrade, not a
+ * loss of OS-preference support.
+ */
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
   --background: #ffffff;
   --foreground: #171717;
@@ -13,12 +25,10 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-    color-scheme: dark;
-  }
+.dark {
+  --background: #0a0a0a;
+  --foreground: #ededed;
+  color-scheme: dark;
 }
 
 html {
