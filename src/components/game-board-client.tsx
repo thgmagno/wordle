@@ -503,6 +503,15 @@ export default function GameBoardClient({
 
   return (
     <div className="space-y-2 sm:space-y-4">
+      {/* Whose word this round is — mirrors the spectator's own "Sua
+          palavra" card; knowing who it belongs to isn't sensitive, only
+          the word itself is (see getGameState's comment on `wordOwner`). */}
+      {currentRound?.wordOwner && (
+        <p className="text-xs text-slate-500 dark:text-slate-400 text-center">
+          Palavra de: <span className="font-semibold">{currentRound.wordOwner.name || "Jogador"}</span>
+        </p>
+      )}
+
       {/* Wordle Grid */}
       <div className="flex justify-center">
         <WordleGrid
