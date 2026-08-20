@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { submitWord, startGame, leaveRoom } from "@/server/room-actions";
 import { validateAnswerWordAction } from "@/server/word-actions";
 import { useRoomRealtime } from "@/lib/use-realtime";
@@ -30,7 +30,8 @@ export default function RoomLobbyClient({
   currentUserId: string;
 }) {
   const router = useRouter();
-  useRoomRealtime(roomId);
+  const suppressRealtimeRefreshRef = useRef(false);
+  useRoomRealtime(roomId, suppressRealtimeRefreshRef);
 
   // Once the host starts the match, room.gameId becomes available. Players
   // other than the host only learn about this through a realtime refresh
@@ -107,11 +108,18 @@ export default function RoomLobbyClient({
 
   const handleLeaveRoom = async () => {
     if (confirm("Deseja sair da sala?")) {
+      // Set before calling leaveRoom: its own realtime broadcast can reach
+      // this same client before the navigation below unmounts it (see
+      // useRoomRealtime's suppressRefreshRef doc) — without this, that
+      // self-triggered refresh would re-run RoomPage's auto-join and
+      // silently put this player right back into the room they just left.
+      suppressRealtimeRefreshRef.current = true;
       setIsLoading(true);
       try {
         await leaveRoom(roomId);
         router.push("/dashboard");
       } catch (err) {
+        suppressRealtimeRefreshRef.current = false;
         setError("Erro ao sair da sala");
         setIsLoading(false);
       }
