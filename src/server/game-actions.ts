@@ -2,7 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
-import { evaluateAttempt } from "@/lib/wordle-evaluation";
+import { evaluateAttempt, MAX_ATTEMPTS } from "@/lib/wordle-evaluation";
 import { validateAttemptWord } from "@/server/word-service";
 import { checkRateLimit, RATE_LIMIT_CONFIGS } from "@/lib/rate-limit";
 import { logger } from "@/lib/logger";
@@ -87,7 +87,11 @@ export async function submitAttempt(
       include: {
         game: {
           include: {
-            room: true,
+            room: {
+              include: {
+                participants: { where: { status: "ACTIVE" } },
+              },
+            },
           },
         },
       },
@@ -122,6 +126,19 @@ export async function submitAttempt(
     });
 
     const attemptCount = previousAttempts.length;
+
+    // A player who already solved the round, or already used every
+    // attempt, is done — even while the round stays ACTIVE for other
+    // players who haven't finished yet (see the round-completion check
+    // below). Enforcing the cap here also closes a gap where nothing
+    // previously stopped a player from submitting unlimited attempts.
+    if (previousAttempts.some((a: any) => a.isCorrect)) {
+      return { success: false, error: "Você já acertou esta rodada" };
+    }
+    if (attemptCount >= MAX_ATTEMPTS) {
+      return { success: false, error: "Você já usou todas as suas tentativas nesta rodada" };
+    }
+
     const normalizedWord = attemptText.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
     const normalizedPrevious = previousAttempts.map((a: any) =>
       a.attemptText.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "")
@@ -149,16 +166,9 @@ export async function submitAttempt(
 
     logger.info("game", "Tentativa enviada", { userId, roundId, attemptNumber: attemptCount + 1, isCorrect }, userId);
 
-    // If correct, end round
+    // Score this attempt if it solved the round. This is per-player and
+    // independent of whether the round as a whole is over yet — see below.
     if (isCorrect) {
-      await prisma.round.update({
-        where: { id: roundId },
-        data: {
-          status: "FINISHED",
-          endedAt: new Date(),
-        },
-      });
-
       // Calculate score for this round
       const scorePerAttempt = 100 - (attemptCount * 10); // Fewer attempts = higher score
       const finalScore = Math.max(scorePerAttempt, 10); // Minimum 10 points
@@ -205,7 +215,41 @@ export async function submitAttempt(
         });
       }
 
-      logger.info("game", "Rodada finalizada com vitória", { userId, roundId, score: finalScore, attemptsUsed: attemptCount + 1 }, userId);
+      logger.info("game", "Jogador acertou a rodada", { userId, roundId, score: finalScore, attemptsUsed: attemptCount + 1 }, userId);
+    }
+
+    // The round only finishes once every active, non-spectator player has
+    // either solved it or used all their attempts — a fast player is no
+    // longer allowed to end the round for everyone else still guessing.
+    const activePlayerIds = round.game.room.participants
+      .map((p: any) => p.userId)
+      .filter((id: string) => id !== round.wordOwnerId);
+
+    const roundAttempts = await prisma.roundAttempt.findMany({
+      where: { roundId, userId: { in: activePlayerIds } },
+      select: { userId: true, isCorrect: true },
+    });
+
+    const attemptsByUser = new Map<string, { isCorrect: boolean }[]>();
+    for (const a of roundAttempts) {
+      const list = attemptsByUser.get(a.userId) ?? [];
+      list.push(a);
+      attemptsByUser.set(a.userId, list);
+    }
+
+    const isPlayerDone = (playerAttempts: { isCorrect: boolean }[]) =>
+      playerAttempts.some((a) => a.isCorrect) || playerAttempts.length >= MAX_ATTEMPTS;
+
+    const allPlayersDone = activePlayerIds.every((id: string) =>
+      isPlayerDone(attemptsByUser.get(id) ?? [])
+    );
+
+    if (allPlayersDone) {
+      await prisma.round.update({
+        where: { id: roundId },
+        data: { status: "FINISHED", endedAt: new Date() },
+      });
+      logger.info("game", "Rodada finalizada — todos os jogadores concluíram", { roundId, gameId: round.gameId }, userId);
     }
 
     revalidatePath(`/game/${round.gameId}`);
@@ -443,6 +487,18 @@ export async function advanceToNextRound(gameId: string): Promise<{
 
     if (game.status === "FINISHED") {
       return { success: false, error: "Game is already finished" };
+    }
+
+    // The round only finishes on its own once every active player has
+    // solved it or used all attempts (see submitAttempt) — the host can't
+    // cut that short by advancing early and leaving others mid-guess.
+    const currentRound = await prisma.round.findUnique({
+      where: { gameId_roundNumber: { gameId, roundNumber: game.currentRound } },
+      select: { status: true },
+    });
+
+    if (currentRound && currentRound.status !== "FINISHED") {
+      return { success: false, error: "Aguarde todos os jogadores concluírem a rodada atual" };
     }
 
     const nextRoundNumber = game.currentRound + 1;

@@ -5,6 +5,13 @@ import {
 } from "./word-normalization";
 
 /**
+ * Maximum guesses a player gets per round, regardless of word length.
+ * Single source of truth for both the server (which must actually enforce
+ * it) and the client (grid/keyboard rendering).
+ */
+export const MAX_ATTEMPTS = 6;
+
+/**
  * Evaluates a Wordle attempt against the answer word
  * Correctly handles repeated letters according to Wordle rules
  */

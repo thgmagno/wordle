@@ -68,6 +68,7 @@ export default async function GamePage({ params }: { params: { gameId: string } 
           gameId={params.gameId}
           gameState={gameState}
           currentUserId={session.user.id || ""}
+          isHost={gameState.room?.host?.id === session.user.id}
         />
       </main>
     </div>

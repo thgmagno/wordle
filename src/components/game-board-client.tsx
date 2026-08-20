@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { submitAttempt, advanceToNextRound } from "@/server/game-actions";
 import { useGameRealtime } from "@/lib/use-realtime";
+import { MAX_ATTEMPTS } from "@/lib/wordle-evaluation";
 import { WordleGrid } from "./wordle-grid";
 import { WordleKeyboard } from "./wordle-keyboard";
 
@@ -25,10 +26,12 @@ export default function GameBoardClient({
   gameId,
   gameState,
   currentUserId,
+  isHost,
 }: {
   gameId: string;
   gameState: GameState;
   currentUserId: string;
+  isHost: boolean;
 }) {
   useGameRealtime(gameId);
 
@@ -42,7 +45,7 @@ export default function GameBoardClient({
   const [keyboardState, setKeyboardState] = useState<Map<string, string>>(new Map());
 
   const currentRound = gameState.rounds[0];
-  const maxAttempts = 6;
+  const maxAttempts = MAX_ATTEMPTS;
   const wordLength = gameState.room.wordLength;
 
   // Realtime updates re-render this component with a fresh `gameState` prop
@@ -303,20 +306,36 @@ export default function GameBoardClient({
             </>
           )}
 
-          {gameState.currentRound < gameState.totalRounds && (
-            <button
-              onClick={handleNextRound}
-              disabled={isLoading}
-              className="bg-blue-600 hover:bg-blue-700 disabled:bg-slate-400 text-white font-semibold px-6 py-3 rounded-lg transition-colors disabled:cursor-not-allowed"
-            >
-              {isLoading ? "Carregando..." : "Próxima Rodada"}
-            </button>
-          )}
+          {currentRound?.status !== "FINISHED" ? (
+            // Other players may still be on their own attempts — the round
+            // (and any "next round"/"finish" action) only becomes available
+            // once every active player has solved it or run out of guesses.
+            <p className="text-sm text-slate-600 dark:text-slate-400">
+              Aguardando os outros jogadores concluírem a rodada...
+            </p>
+          ) : (
+            <>
+              {gameState.currentRound < gameState.totalRounds &&
+                (isHost ? (
+                  <button
+                    onClick={handleNextRound}
+                    disabled={isLoading}
+                    className="bg-blue-600 hover:bg-blue-700 disabled:bg-slate-400 text-white font-semibold px-6 py-3 rounded-lg transition-colors disabled:cursor-not-allowed"
+                  >
+                    {isLoading ? "Carregando..." : "Próxima Rodada"}
+                  </button>
+                ) : (
+                  <p className="text-sm text-slate-600 dark:text-slate-400">
+                    Aguardando o anfitrião iniciar a próxima rodada...
+                  </p>
+                ))}
 
-          {gameState.currentRound === gameState.totalRounds && (
-            <a href="/dashboard" className="btn-primary">
-              Voltar para Dashboard
-            </a>
+              {gameState.currentRound === gameState.totalRounds && (
+                <a href="/dashboard" className="btn-primary">
+                  Voltar para Dashboard
+                </a>
+              )}
+            </>
           )}
         </div>
       )}
