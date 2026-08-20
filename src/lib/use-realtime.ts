@@ -1,24 +1,28 @@
 "use client";
 
-import { useEffect, type RefObject } from "react";
 import { useRouter } from "next/navigation";
-import { io, type Socket } from "socket.io-client";
+import PusherClient from "pusher-js";
+import { type RefObject, useEffect } from "react";
 
-let socket: Socket | null = null;
+let pusherClient: PusherClient | null | undefined;
 
-function isRealtimeEnabled(): boolean {
-  // Explicitly documented opt-out for environments that don't run the
-  // custom server.js (see README). Enabled by default otherwise.
-  return process.env.NEXT_PUBLIC_SOCKET_IO_ENABLED !== "false";
-}
-
-function getSocket(): Socket {
-  if (!socket) {
-    socket = io({
-      path: process.env.NEXT_PUBLIC_SOCKET_IO_PATH || "/socket.io",
-    });
+/**
+ * Lazily creates the shared Pusher client. Returns `null` (and does so
+ * every time after) when the public key/cluster aren't configured — that's
+ * the intentional "realtime disabled" fallback described in
+ * src/lib/realtime.ts, not an error: the app is fully usable without it,
+ * just without live updates.
+ */
+function getPusherClient(): PusherClient | null {
+  if (pusherClient !== undefined) {
+    return pusherClient;
   }
-  return socket;
+
+  const key = process.env.NEXT_PUBLIC_PUSHER_KEY;
+  const cluster = process.env.NEXT_PUBLIC_PUSHER_CLUSTER;
+
+  pusherClient = key && cluster ? new PusherClient(key, { cluster }) : null;
+  return pusherClient;
 }
 
 /**
@@ -30,9 +34,9 @@ function getSocket(): Socket {
  * `suppressRefreshRef`, when passed, lets the caller silence the next
  * refresh(es) — needed because a player's own `leaveRoom()` call broadcasts
  * "room:update" to everyone still subscribed to the room's channel,
- * including this same client (its socket doesn't unsubscribe until the
- * component unmounts, which hasn't happened yet while the action is still
- * in flight). Without suppressing it, that self-triggered refresh would
+ * including this same client (it doesn't unsubscribe until the component
+ * unmounts, which hasn't happened yet while the action is still in
+ * flight). Without suppressing it, that self-triggered refresh would
  * re-render RoomPage as a genuine navigation — with this player now absent
  * from the participant list — and its auto-join-on-visit logic (CLAUDE.md
  * section 14) would silently add them right back before the router
@@ -40,17 +44,18 @@ function getSocket(): Socket {
  */
 export function useRoomRealtime(
   roomId: string,
-  suppressRefreshRef?: RefObject<boolean>
+  suppressRefreshRef?: RefObject<boolean>,
 ): void {
   const router = useRouter();
 
   useEffect(() => {
-    if (!isRealtimeEnabled() || !roomId) {
+    const client = getPusherClient();
+    if (!client || !roomId) {
       return;
     }
 
-    const s = getSocket();
-    s.emit("room:join", roomId);
+    const channelName = `room-${roomId}`;
+    const channel = client.subscribe(channelName);
 
     const handleUpdate = () => {
       if (suppressRefreshRef?.current) {
@@ -58,11 +63,11 @@ export function useRoomRealtime(
       }
       router.refresh();
     };
-    s.on("room:update", handleUpdate);
+    channel.bind("room:update", handleUpdate);
 
     return () => {
-      s.off("room:update", handleUpdate);
-      s.emit("room:leave", roomId);
+      channel.unbind("room:update", handleUpdate);
+      client.unsubscribe(channelName);
     };
   }, [roomId, router, suppressRefreshRef]);
 }
@@ -76,19 +81,20 @@ export function useGameRealtime(gameId: string): void {
   const router = useRouter();
 
   useEffect(() => {
-    if (!isRealtimeEnabled() || !gameId) {
+    const client = getPusherClient();
+    if (!client || !gameId) {
       return;
     }
 
-    const s = getSocket();
-    s.emit("game:join", gameId);
+    const channelName = `game-${gameId}`;
+    const channel = client.subscribe(channelName);
 
     const handleUpdate = () => router.refresh();
-    s.on("game:update", handleUpdate);
+    channel.bind("game:update", handleUpdate);
 
     return () => {
-      s.off("game:update", handleUpdate);
-      s.emit("game:leave", gameId);
+      channel.unbind("game:update", handleUpdate);
+      client.unsubscribe(channelName);
     };
   }, [gameId, router]);
 }

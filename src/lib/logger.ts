@@ -18,7 +18,8 @@ type LogCategory =
   | "word"
   | "security"
   | "performance"
-  | "error";
+  | "error"
+  | "realtime";
 
 interface LogEntry {
   timestamp: string;
