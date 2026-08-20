@@ -164,6 +164,13 @@ export const RATE_LIMIT_CONFIGS = {
     message: "Muitas partidas iniciadas. Aguarde um pouco.",
   } as RateLimitConfig,
 
+  // Dica enviada pelo espectador (dono da palavra) durante uma rodada
+  ROUND_HINT: {
+    windowMs: 5 * 1000, // 5 segundos
+    maxRequests: 1,
+    message: "Aguarde antes de enviar outra dica.",
+  } as RateLimitConfig,
+
   // Requisições gerais de API
   API_REQUEST: {
     windowMs: 60 * 1000, // 1 minuto

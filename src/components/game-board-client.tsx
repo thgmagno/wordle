@@ -1,12 +1,14 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { submitAttempt, advanceToNextRound } from "@/server/game-actions";
+import { submitAttempt, advanceToNextRound, sendRoundHint } from "@/server/game-actions";
 import { useGameRealtime } from "@/lib/use-realtime";
 import { MAX_ATTEMPTS } from "@/lib/wordle-evaluation";
 import { Toast } from "./toast";
 import { WordleGrid } from "./wordle-grid";
 import { WordleKeyboard } from "./wordle-keyboard";
+
+const MAX_HINT_LENGTH = 140;
 
 interface MatchResultEntry {
   userId: string;
@@ -29,6 +31,43 @@ interface GameState {
 interface AttemptResult {
   letter: string;
   status: "CORRECT" | "PRESENT" | "ABSENT";
+}
+
+interface RoundHintEntry {
+  id: string;
+  text: string;
+}
+
+/**
+ * Read-only hint list, shared by the spectator's own "hints I've sent"
+ * view and the active players' "hints I've received" view — same data,
+ * same rendering, just a different caller.
+ */
+function HintsList({
+  hints,
+  emptyLabel,
+}: {
+  hints: RoundHintEntry[];
+  emptyLabel?: string;
+}) {
+  if (hints.length === 0) {
+    return emptyLabel ? (
+      <p className="text-xs text-slate-500 dark:text-slate-400">{emptyLabel}</p>
+    ) : null;
+  }
+
+  return (
+    <ul className="space-y-1.5">
+      {hints.map((hint) => (
+        <li
+          key={hint.id}
+          className="text-sm bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-100 rounded-lg px-3 py-2"
+        >
+          💡 {hint.text}
+        </li>
+      ))}
+    </ul>
+  );
 }
 
 /**
@@ -128,6 +167,9 @@ export default function GameBoardClient({
 
   const [word, setWord] = useState("");
   const [attempts, setAttempts] = useState(gameState.rounds[0]?.attempts || []);
+  const [hints, setHints] = useState<RoundHintEntry[]>(gameState.rounds[0]?.hints ?? []);
+  const [hintText, setHintText] = useState("");
+  const [isSendingHint, setIsSendingHint] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -151,6 +193,23 @@ export default function GameBoardClient({
     setSuccess(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gameState.rounds[0]?.id]);
+
+  // Hints are broadcast to everyone in the round (see getGameState), not
+  // just the sender, so — unlike `attempts` above, which is only ever
+  // appended to locally by this player's own actions — this needs its own
+  // effect that resyncs from the prop whenever a new hint actually arrives
+  // (hints.length changing), not only when the round itself changes. A
+  // realtime "game:update" event re-renders this component with a fresh
+  // `gameState` prop (see useGameRealtime) without remounting it, so
+  // without this, an active player would never see a hint sent after their
+  // first render — and, if the sending spectator relied on this same sync
+  // instead of appending optimistically, they'd have to wait on Pusher
+  // (optional — see src/lib/realtime.ts) instead of seeing their own
+  // message immediately.
+  useEffect(() => {
+    setHints(gameState.rounds[0]?.hints ?? []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gameState.rounds[0]?.id, gameState.rounds[0]?.hints?.length]);
 
   // Check if game is over or won
   useEffect(() => {
@@ -208,6 +267,39 @@ export default function GameBoardClient({
       console.error(err);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleSendHint = async () => {
+    const trimmed = hintText.trim();
+    if (!trimmed) {
+      setError("Digite uma dica antes de enviar");
+      return;
+    }
+
+    setIsSendingHint(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const result = await sendRoundHint(currentRound.id, trimmed);
+
+      if (result.success && result.hint) {
+        // Appended locally right away instead of waiting on the realtime
+        // round trip — see the hints-sync effect above for why that
+        // matters (Pusher is optional; without it this would otherwise
+        // never show up for the sender at all).
+        setHints((prev) => [...prev, result.hint as RoundHintEntry]);
+        setHintText("");
+        setSuccess("Dica enviada!");
+      } else {
+        setError(result.error || "Erro ao enviar dica");
+      }
+    } catch (err) {
+      setError("Erro ao enviar dica");
+      console.error(err);
+    } finally {
+      setIsSendingHint(false);
     }
   };
 
@@ -291,6 +383,46 @@ export default function GameBoardClient({
           </p>
         </div>
 
+        {/* Only while the round is still ACTIVE — once it's FINISHED there's
+            nobody left to send a hint to; the round-advance controls below
+            take over instead. */}
+        {currentRound?.status === "ACTIVE" && (
+          <div className="card">
+            <h3 className="text-sm font-semibold mb-1 flex items-center gap-1">
+              💡 Enviar uma dica
+            </h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
+              Sua dica aparece para todos os jogadores desta rodada. Ela não
+              pode revelar a palavra secreta.
+            </p>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={hintText}
+                onChange={(e) => setHintText(e.target.value.slice(0, MAX_HINT_LENGTH))}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleSendHint();
+                }}
+                placeholder="Ex: começa com a letra C"
+                disabled={isSendingHint}
+                maxLength={MAX_HINT_LENGTH}
+                className="input-base flex-1"
+              />
+              <button
+                type="button"
+                onClick={handleSendHint}
+                disabled={isSendingHint || !hintText.trim()}
+                className="btn-primary shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isSendingHint ? "..." : "Enviar"}
+              </button>
+            </div>
+            <div className="mt-3">
+              <HintsList hints={hints} emptyLabel="Nenhuma dica enviada ainda." />
+            </div>
+          </div>
+        )}
+
         <div className="space-y-6">
           {othersProgress.length === 0 && (
             <p className="text-center text-sm text-slate-600 dark:text-slate-400">
@@ -317,6 +449,7 @@ export default function GameBoardClient({
         </div>
 
         {error && <Toast message={error} type="error" onDismiss={() => setError(null)} />}
+        {success && <Toast message={success} type="success" onDismiss={() => setSuccess(null)} />}
 
         {/* Round advancement controls. The spectator (the round's word
             owner) never plays this round themselves, but if they're also
@@ -350,6 +483,15 @@ export default function GameBoardClient({
           maxAttempts={maxAttempts}
         />
       </div>
+
+      {/* Hints from the round's spectator — only takes up space once one
+          has actually been sent, so it doesn't affect the common case
+          (no hints yet) on a phone screen with no room to spare. */}
+      {hints.length > 0 && (
+        <div className="max-w-xs mx-auto w-full">
+          <HintsList hints={hints} />
+        </div>
+      )}
 
       {/* Messages float above the page as a toast instead of an inline
           banner — an inline banner pushes the grid/keyboard down and was
