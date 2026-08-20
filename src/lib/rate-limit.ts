@@ -184,12 +184,17 @@ export function cleanupExpiredEntries() {
   }
 }
 
-// Executar limpeza a cada 5 minutos
+// Executar limpeza a cada 5 minutos. unref() so this background interval
+// never keeps the process alive by itself — matters for the Next.js
+// server (irrelevant there since the HTTP listener already does that) and
+// for test runners, which would otherwise hang after the last test
+// finishes just because this timer is still pending.
 if (typeof global !== "undefined" && !global._rateLimitCleanupInterval) {
   global._rateLimitCleanupInterval = setInterval(
     cleanupExpiredEntries,
     5 * 60 * 1000
   );
+  global._rateLimitCleanupInterval.unref?.();
 }
 
 declare global {

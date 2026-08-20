@@ -2,7 +2,11 @@
 
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
-import { evaluateAttempt, MAX_ATTEMPTS } from "@/lib/wordle-evaluation";
+import {
+  evaluateAttempt,
+  MAX_ATTEMPTS,
+  haveAllPlayersFinishedRound,
+} from "@/lib/wordle-evaluation";
 import { validateAttemptWord } from "@/server/word-service";
 import { checkRateLimit, RATE_LIMIT_CONFIGS } from "@/lib/rate-limit";
 import { logger } from "@/lib/logger";
@@ -237,12 +241,7 @@ export async function submitAttempt(
       attemptsByUser.set(a.userId, list);
     }
 
-    const isPlayerDone = (playerAttempts: { isCorrect: boolean }[]) =>
-      playerAttempts.some((a) => a.isCorrect) || playerAttempts.length >= MAX_ATTEMPTS;
-
-    const allPlayersDone = activePlayerIds.every((id: string) =>
-      isPlayerDone(attemptsByUser.get(id) ?? [])
-    );
+    const allPlayersDone = haveAllPlayersFinishedRound(activePlayerIds, attemptsByUser);
 
     if (allPlayersDone) {
       await prisma.round.update({
