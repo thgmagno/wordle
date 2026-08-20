@@ -6,7 +6,7 @@ A production-ready multiplayer Wordle game in Brazilian Portuguese with real-tim
 
 - **Multiplayer Gameplay**: Create rooms and play with friends in real-time
 - **Portuguese Dictionary**: 145k+ words from fserb/pt-br repository with proper normalization
-- **Real-time Synchronization**: WebSocket-based lobby and game updates
+- **Real-time Synchronization**: Pusher Channels-based lobby and game updates
 - **Global Ranking**: Compete with players worldwide with privacy controls
 - **Authentication**: Google OAuth integration for secure accounts
 - **Responsive Design**: Mobile-first interface with light/dark theme support
@@ -22,7 +22,7 @@ A production-ready multiplayer Wordle game in Brazilian Portuguese with real-tim
 - **Backend**: Next.js Server Components, Server Actions, Node.js
 - **Database**: MongoDB with Prisma ORM 7
 - **Authentication**: Next-Auth 5 with Google Provider
-- **Real-time**: Socket.io for WebSocket communication
+- **Real-time**: Pusher Channels (works on serverless hosts like Vercel — no persistent Node process required)
 - **Testing**: Jest for unit tests
 
 ## Environment Setup
@@ -64,9 +64,13 @@ NEXTAUTH_SECRET="generate-a-random-secret"
 GOOGLE_CLIENT_ID="your-client-id"
 GOOGLE_CLIENT_SECRET="your-client-secret"
 
-# WebSocket (Socket.IO uses the same domain as the app)
-NEXT_PUBLIC_SOCKET_IO_ENABLED="true"
-NEXT_PUBLIC_SOCKET_IO_PATH="/socket.io"
+# Realtime (Pusher Channels — https://pusher.com, free tier is enough here)
+PUSHER_APP_ID="your-app-id"
+PUSHER_KEY="your-key"
+PUSHER_SECRET="your-secret"
+PUSHER_CLUSTER="your-cluster"
+NEXT_PUBLIC_PUSHER_KEY="your-key"
+NEXT_PUBLIC_PUSHER_CLUSTER="your-cluster"
 ```
 
 ### Database Setup
@@ -99,13 +103,15 @@ This script:
 
 ### Development Server
 
-`npm run dev` and `npm run start` run a custom server (`server.js`) instead
-of the plain `next dev`/`next start`: the App Router alone has no
-long-lived connection to attach WebSockets to, so `server.js` wraps the
-Next.js request handler in a raw Node HTTP server and attaches a Socket.io
-server to the same port. This is what powers the realtime lobby/game
-updates — see `src/lib/realtime.ts` (server-side emit) and
-`src/lib/use-realtime.ts` (client-side subscribe).
+`npm run dev` and `npm run start` run the plain Next.js CLI (`next
+dev`/`next start`) — no custom server process. Realtime updates go through
+[Pusher Channels](https://pusher.com) instead of a self-hosted WebSocket
+server: Server Actions publish an event via its REST API
+(`src/lib/realtime.ts`), and the browser subscribes to it directly
+(`src/lib/use-realtime.ts`). This is what makes it work unmodified on
+serverless hosts like Vercel, where each request runs as an isolated,
+short-lived function invocation with nothing to keep a raw Socket.io
+server's persistent connections alive.
 
 Start the development server:
 
@@ -115,11 +121,11 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser.
 
-If you ever need to run without the realtime layer (e.g. a host that can't
-run a custom Node server), set `NEXT_PUBLIC_SOCKET_IO_ENABLED="false"` and
-serve with `next start` directly — the app still works, just without live
-updates; lobby/game data still refreshes on navigation and Server Action
-responses.
+Realtime is optional: leave the `PUSHER_*`/`NEXT_PUBLIC_PUSHER_*` variables
+unset and the app still runs fully — lobby/game data just only refreshes on
+navigation and Server Action responses instead of live, since
+`emitRoomUpdate`/`emitGameUpdate` and the client subscription hooks both no-op
+without credentials.
 
 ## Project Structure
 
@@ -280,9 +286,15 @@ Tests include:
 ## Deployment
 
 ### Prerequisites
-- MongoDB Atlas or self-hosted MongoDB
-- Node.js hosting (Vercel, Railway, etc.)
+- MongoDB Atlas or self-hosted MongoDB (must be a replica set — Prisma's
+  MongoDB connector requires transactions/upserts, which standalone
+  `mongod` doesn't support)
+- Node.js hosting (Vercel, Railway, etc.) — the app is plain `next
+  dev`/`next start` with no custom server, so any standard Next.js host
+  works, serverless included
 - Google OAuth credentials
+- A [Pusher](https://pusher.com) app (free tier) for realtime updates —
+  optional; the app runs without it, just without live lobby/game updates
 
 ### Vercel Deployment
 
@@ -291,6 +303,10 @@ Tests include:
 3. Set environment variables in Vercel dashboard
 4. Run initial deployment
 5. Import dictionary via one-time command
+6. After any change to `prisma/schema.prisma`, run `npx prisma db push`
+   against the production database once — Vercel's build regenerates the
+   Prisma *Client* automatically (see `postinstall` in package.json), but
+   nothing pushes schema/index changes to the database itself
 
 ### Environment Variables
 ```
@@ -299,8 +315,12 @@ NEXTAUTH_URL
 NEXTAUTH_SECRET
 GOOGLE_CLIENT_ID
 GOOGLE_CLIENT_SECRET
-NEXT_PUBLIC_SOCKET_IO_ENABLED
-NEXT_PUBLIC_SOCKET_IO_PATH
+PUSHER_APP_ID
+PUSHER_KEY
+PUSHER_SECRET
+PUSHER_CLUSTER
+NEXT_PUBLIC_PUSHER_KEY
+NEXT_PUBLIC_PUSHER_CLUSTER
 NODE_ENV=production
 ```
 

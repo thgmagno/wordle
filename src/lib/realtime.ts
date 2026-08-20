@@ -1,36 +1,65 @@
 /**
- * Bridge to the Socket.io server instance created in `server.js`.
+ * Server-side bridge to Pusher Channels.
  *
- * `server.js` runs as a plain Node process (outside Next.js' own module
- * bundler) and stores the io instance on `globalThis` after creating it.
- * Server Actions and Route Handlers are bundled separately by Next.js, so
- * they can't import the io instance directly — but they run in the same
- * Node process, and `globalThis` is shared regardless of which module
- * system loaded the code. That's the only reason this goes through
- * `globalThis` instead of a normal module-level singleton.
+ * Room/game state changes are broadcast through Pusher's REST API rather
+ * than a raw Socket.io server on a custom Node process: Vercel (and most
+ * serverless hosts) run each Server Action/Route Handler as an isolated,
+ * short-lived function invocation with no persistent connection to attach
+ * a WebSocket server to, so a long-running `server.js` never actually
+ * starts there — every emit silently became a no-op in production. Pusher
+ * runs the actual persistent connections on its own infrastructure; this
+ * module just does a one-off authenticated HTTP call to tell it "publish
+ * this event," which works the same from any serverless invocation.
  *
- * When the app runs without the custom server (e.g. `next build` during
- * static analysis, or a deployment that doesn't wire up server.js), the io
- * instance is simply absent and every emit below becomes a no-op — the
- * realtime layer is a "something changed, please refetch" signal on top of
- * the server-authoritative state, never a requirement for correctness.
+ * Configuration is optional by design: with no Pusher credentials set,
+ * `pusher` below is `null` and every emit becomes a no-op — the realtime
+ * layer is a "something changed, please refetch" signal on top of the
+ * server-authoritative state, never a requirement for correctness (see
+ * src/lib/use-realtime.ts for the client side of that same fallback).
  */
 
-import type { Server } from "socket.io";
+import Pusher from "pusher";
+import { logger } from "@/lib/logger";
 
-declare global {
-  // eslint-disable-next-line no-var
-  var __wordleSocketIO: Server | undefined;
+const { PUSHER_APP_ID, PUSHER_KEY, PUSHER_SECRET, PUSHER_CLUSTER } =
+  process.env;
+
+const pusher =
+  PUSHER_APP_ID && PUSHER_KEY && PUSHER_SECRET && PUSHER_CLUSTER
+    ? new Pusher({
+        appId: PUSHER_APP_ID,
+        key: PUSHER_KEY,
+        secret: PUSHER_SECRET,
+        cluster: PUSHER_CLUSTER,
+        useTLS: true,
+      })
+    : null;
+
+// Pusher channel names are restricted to [A-Za-z0-9_\-=@,.;]+ — no colons —
+// so these use "-" where the old Socket.io room names used ":".
+function roomChannel(roomId: string): string {
+  return `room-${roomId}`;
+}
+
+function gameChannel(gameId: string): string {
+  return `game-${gameId}`;
 }
 
 /**
  * Notify every client watching a room's lobby that something changed
  * (a player joined/left, a word was submitted, the host started the
  * match). Clients react by refreshing their server-rendered data — the
- * socket event never carries game state itself.
+ * event never carries game state itself.
  */
 export function emitRoomUpdate(roomId: string): void {
-  globalThis.__wordleSocketIO?.to(`room:${roomId}`).emit("room:update");
+  pusher?.trigger(roomChannel(roomId), "room:update", {}).catch((error) => {
+    logger.error(
+      "realtime",
+      "Falha ao publicar atualização de sala via Pusher",
+      error as Error,
+      { roomId },
+    );
+  });
 }
 
 /**
@@ -39,5 +68,12 @@ export function emitRoomUpdate(roomId: string): void {
  * next round started, the match ended).
  */
 export function emitGameUpdate(gameId: string): void {
-  globalThis.__wordleSocketIO?.to(`game:${gameId}`).emit("game:update");
+  pusher?.trigger(gameChannel(gameId), "game:update", {}).catch((error) => {
+    logger.error(
+      "realtime",
+      "Falha ao publicar atualização de jogo via Pusher",
+      error as Error,
+      { gameId },
+    );
+  });
 }
