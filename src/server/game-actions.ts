@@ -480,6 +480,19 @@ export async function getGameState(gameId: string) {
 
     const ownAttempts = round.attempts.filter((a: any) => a.userId === userId);
 
+    // Who this round's word belongs to isn't sensitive — CLAUDE.md never
+    // restricts the spectator's identity, only the secret word itself
+    // (round.wordOwnerId was already spread into every caller's response
+    // below well before this) — so an active player can be told whose
+    // word they're guessing, the same way the spectator already sees
+    // "Sua palavra" for their own. Looked up from the room's already-
+    // fetched participant roster instead of a new query or schema
+    // relation; falls back to a generic label in the unlikely case the
+    // owner isn't in the (ACTIVE-filtered) list anymore.
+    const wordOwner = fullGame.room.participants.find(
+      (p: any) => p.userId === round.wordOwnerId
+    )?.user ?? { id: round.wordOwnerId, name: null, image: null };
+
     // Every other active player's guesses this round (word + correctness
     // pattern), grouped per player so the UI can render one board per
     // player. Visible to the spectator (CLAUDE.md section 19 expects them
@@ -564,6 +577,7 @@ export async function getGameState(gameId: string) {
           ...round,
           attempts: ownAttempts,
           othersProgress,
+          wordOwner,
           answerWord: canRevealAnswer ? round.answerWord : undefined,
         },
       ],
