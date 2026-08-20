@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth";
 import { getRoomInfo, joinRoom } from "@/server/room-actions";
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 import Link from "next/link";
 import RoomLobbyClient from "@/components/room-lobby-client";
 
@@ -75,6 +76,27 @@ export default async function RoomPage({
         <RoomUnavailable
           title="Sala não disponível"
           message="Esta sala já iniciou a partida ou foi encerrada, e você não fazia parte dela."
+        />
+      );
+    }
+
+    // This render can also happen as the implicit re-render Next.js
+    // performs to produce a fresh RSC payload right after a Server Action
+    // call from a client component on this very route (e.g. leaveRoom,
+    // called from RoomLobbyClient) — not just on a genuine navigation to
+    // this URL. Auto-joining in that case would immediately undo whatever
+    // the action just did: a participant who just intentionally left would
+    // be silently re-added as ACTIVE before their browser even finishes
+    // navigating away. Next.js marks that kind of request with a
+    // "next-action" header, which a plain page load never has — only
+    // auto-join on a real navigation.
+    const isServerActionRerender = (await headers()).has("next-action");
+
+    if (isServerActionRerender) {
+      return (
+        <RoomUnavailable
+          title="Você não está mais nesta sala"
+          message="Atualize a página se acredita que isso é um erro."
         />
       );
     }

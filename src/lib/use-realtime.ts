@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, type RefObject } from "react";
 import { useRouter } from "next/navigation";
 import { io, type Socket } from "socket.io-client";
 
@@ -26,8 +26,22 @@ function getSocket(): Socket {
  * event (emitted by the server after a join/leave/word submission/game
  * start) triggers a Server Component refresh, so the lobby reflects the
  * new state without the user having to reload the page.
+ *
+ * `suppressRefreshRef`, when passed, lets the caller silence the next
+ * refresh(es) — needed because a player's own `leaveRoom()` call broadcasts
+ * "room:update" to everyone still subscribed to the room's channel,
+ * including this same client (its socket doesn't unsubscribe until the
+ * component unmounts, which hasn't happened yet while the action is still
+ * in flight). Without suppressing it, that self-triggered refresh would
+ * re-render RoomPage as a genuine navigation — with this player now absent
+ * from the participant list — and its auto-join-on-visit logic (CLAUDE.md
+ * section 14) would silently add them right back before the router
+ * finishes navigating them away.
  */
-export function useRoomRealtime(roomId: string): void {
+export function useRoomRealtime(
+  roomId: string,
+  suppressRefreshRef?: RefObject<boolean>
+): void {
   const router = useRouter();
 
   useEffect(() => {
@@ -38,14 +52,19 @@ export function useRoomRealtime(roomId: string): void {
     const s = getSocket();
     s.emit("room:join", roomId);
 
-    const handleUpdate = () => router.refresh();
+    const handleUpdate = () => {
+      if (suppressRefreshRef?.current) {
+        return;
+      }
+      router.refresh();
+    };
     s.on("room:update", handleUpdate);
 
     return () => {
       s.off("room:update", handleUpdate);
       s.emit("room:leave", roomId);
     };
-  }, [roomId, router]);
+  }, [roomId, router, suppressRefreshRef]);
 }
 
 /**
