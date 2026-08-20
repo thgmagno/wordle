@@ -3,6 +3,7 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  color-scheme: light;
 }
 
 @theme inline {
@@ -16,11 +17,176 @@
   :root {
     --background: #0a0a0a;
     --foreground: #ededed;
+    color-scheme: dark;
   }
+}
+
+html {
+  color-scheme: light dark;
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Tailwind component classes for common elements */
+@layer components {
+  .btn-primary {
+    @apply inline-flex items-center justify-center rounded-lg bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center rounded-lg bg-slate-200 dark:bg-slate-700 px-4 py-2 font-medium text-slate-900 dark:text-slate-50 hover:bg-slate-300 dark:hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors;
+  }
+
+  .card {
+    @apply rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-6 shadow-sm;
+  }
+
+  .input-base {
+    @apply rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-4 py-2 text-slate-900 dark:text-slate-50 placeholder-slate-500 dark:placeholder-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50;
+  }
+}
+
+/* Wordle-specific styles */
+@layer components {
+  .wordle-grid {
+    @apply grid gap-2 max-w-sm;
+  }
+
+  .wordle-tile {
+    @apply aspect-square flex items-center justify-center rounded-lg border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-2xl font-bold uppercase;
+  }
+
+  .wordle-tile.correct {
+    @apply border-green-500 bg-green-500 text-white dark:bg-green-600;
+  }
+
+  .wordle-tile.present {
+    @apply border-yellow-500 bg-yellow-500 text-white dark:bg-yellow-600;
+  }
+
+  .wordle-tile.absent {
+    @apply border-slate-400 bg-slate-400 text-white dark:bg-slate-600 dark:border-slate-500;
+  }
+
+  .keyboard-key {
+    @apply rounded-md border border-slate-300 dark:border-slate-600 bg-slate-100 dark:bg-slate-800 px-3 py-2 text-xs font-bold uppercase text-slate-900 dark:text-slate-50 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors;
+  }
+
+  .keyboard-key.correct {
+    @apply border-green-500 bg-green-500 text-white dark:bg-green-600 dark:border-green-500;
+  }
+
+  .keyboard-key.present {
+    @apply border-yellow-500 bg-yellow-500 text-white dark:bg-yellow-600 dark:border-yellow-500;
+  }
+
+  .keyboard-key.absent {
+    @apply border-slate-400 bg-slate-400 text-white dark:bg-slate-600 dark:border-slate-500;
+  }
+}
+
+/* Animations */
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes flip {
+  0% {
+    transform: rotateX(0);
+  }
+  50% {
+    transform: rotateX(90deg);
+  }
+  100% {
+    transform: rotateX(0);
+  }
+}
+
+@keyframes shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  10%,
+  30%,
+  50%,
+  70%,
+  90% {
+    transform: translateX(-5px);
+  }
+  20%,
+  40%,
+  60%,
+  80% {
+    transform: translateX(5px);
+  }
+}
+
+@layer utilities {
+  .animate-slide-in {
+    animation: slideIn 0.3s ease-out;
+  }
+
+  .animate-slide-up {
+    animation: slideUp 0.3s ease-out;
+  }
+
+  .animate-flip {
+    animation: flip 0.6s ease-in-out;
+  }
+
+  .animate-shake {
+    animation: shake 0.4s ease-in-out;
+  }
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+html.dark ::-webkit-scrollbar-thumb {
+  background: #475569;
+}
+
+html.dark ::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
 }
