@@ -95,6 +95,14 @@ model Word {
 
 model Room {
   id                String             @id @default(auto()) @map("_id") @db.ObjectId
+  // Short, human-typeable public identifier (e.g. "7K3PQR") used in the
+  // shareable URL and shown to players in the lobby, instead of the raw
+  // ObjectId above — that's a 24-character hex string with no vowels or
+  // separators, effectively impossible to read aloud, memorize, or type
+  // correctly. Every FK below (`RoomParticipant.roomId`, `Game.roomId`,
+  // `SubmittedWord.roomId`) still stores the real `id`, never `code` — the
+  // code only exists as an alternate lookup key on this model.
+  code              String             @unique
   hostId            String             @db.ObjectId
   wordLength        Int                // 4, 5, or 6
   status            RoomStatus         @default(LOBBY) // LOBBY, IN_PROGRESS, FINISHED

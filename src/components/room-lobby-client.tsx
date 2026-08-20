@@ -139,9 +139,12 @@ export default function RoomLobbyClient({
             <h3 className="text-lg font-semibold mb-4">Informações da Sala</h3>
             <div className="space-y-3 text-sm">
               <div>
-                <p className="text-slate-600 dark:text-slate-400">ID da Sala</p>
-                <p className="font-mono text-xs bg-slate-100 dark:bg-slate-700 p-2 rounded">
+                <p className="text-slate-600 dark:text-slate-400">Código da Sala</p>
+                <p className="font-mono text-lg font-bold tracking-widest bg-slate-100 dark:bg-slate-700 p-2 rounded text-center">
                   {roomId}
+                </p>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                  Compartilhe este código para outros jogadores entrarem.
                 </p>
               </div>
               <div>

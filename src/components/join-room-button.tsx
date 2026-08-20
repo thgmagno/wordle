@@ -11,11 +11,11 @@ export function JoinRoomButton() {
   const router = useRouter();
 
   function handleClick() {
-    const roomId = window.prompt("Digite o ID da sala:");
-    const trimmed = roomId?.trim();
+    const input = window.prompt("Digite o código da sala:");
+    const code = input?.trim().toUpperCase();
 
-    if (trimmed) {
-      router.push(`/room/${encodeURIComponent(trimmed)}`);
+    if (code) {
+      router.push(`/room/${encodeURIComponent(code)}`);
     }
   }
 

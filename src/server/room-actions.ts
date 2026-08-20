@@ -7,6 +7,7 @@ import { logger } from "@/lib/logger";
 import { revalidatePath } from "next/cache";
 import { createRound } from "@/server/game-actions";
 import { emitRoomUpdate } from "@/lib/realtime";
+import { generateRoomCode, normalizeRoomCode } from "@/lib/room-code";
 
 /**
  * Create a new game room.
@@ -39,15 +40,36 @@ export async function createRoom(
       return { success: false, error: rateLimit.message || "Limite de criação de salas atingido" };
     }
 
-    // Create room
-    const room = await prisma.room.create({
-      data: {
-        hostId,
-        wordLength,
-        status: "LOBBY",
-        maxPlayers: 10,
-      },
-    });
+    // Create room. Room.code (the short, human-typeable public identifier —
+    // see the schema comment) has its own unique constraint; a collision
+    // is astronomically unlikely at 31^6 possible codes, but retrying a
+    // few times turns that near-impossible case into a clean success
+    // instead of a confusing user-facing failure.
+    let room: Awaited<ReturnType<typeof prisma.room.create>> | undefined;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      try {
+        room = await prisma.room.create({
+          data: {
+            code: generateRoomCode(),
+            hostId,
+            wordLength,
+            status: "LOBBY",
+            maxPlayers: 10,
+          },
+        });
+        break;
+      } catch (err) {
+        const isCodeCollision = (err as { code?: string } | null)?.code === "P2002";
+        if (isCodeCollision && attempt < 4) {
+          continue;
+        }
+        throw err;
+      }
+    }
+
+    if (!room) {
+      throw new Error("Falha ao gerar um código de sala único");
+    }
 
     // Add host as participant
     await prisma.roomParticipant.create({
@@ -58,9 +80,9 @@ export async function createRoom(
       },
     });
 
-    logger.info("room", "Sala criada", { roomId: room.id, hostId, wordLength }, hostId);
+    logger.info("room", "Sala criada", { roomId: room.id, code: room.code, hostId, wordLength }, hostId);
     revalidatePath("/");
-    return { success: true, roomId: room.id };
+    return { success: true, roomId: room.code };
   } catch (error) {
     logger.error("room", "Erro ao criar sala", error as Error, { hostId }, hostId);
     return { success: false, error: "Falha ao criar sala" };
@@ -73,7 +95,7 @@ export async function createRoom(
  * client-supplied id, to prevent adding/removing arbitrary participants.
  */
 export async function joinRoom(
-  roomId: string
+  roomCode: string
 ): Promise<{ success: boolean; error?: string }> {
   const session = await auth();
   const userId = session?.user?.id;
@@ -83,8 +105,8 @@ export async function joinRoom(
   }
 
   try {
-    if (!roomId) {
-      return { success: false, error: "Room ID is required" };
+    if (!roomCode) {
+      return { success: false, error: "Código da sala é obrigatório" };
     }
 
     // Check if room exists and is in LOBBY status. Only ACTIVE participants
@@ -92,7 +114,7 @@ export async function joinRoom(
     // churn shouldn't reject new players just because old LEFT rows still
     // exist (getRoomInfo already filters the same way for display).
     const room = await prisma.room.findUnique({
-      where: { id: roomId },
+      where: { code: normalizeRoomCode(roomCode) },
       include: { participants: { where: { status: "ACTIVE" } } },
     });
 
@@ -107,6 +129,11 @@ export async function joinRoom(
     if (room.participants.length >= room.maxPlayers) {
       return { success: false, error: "A sala está cheia" };
     }
+
+    // Every RoomParticipant/SubmittedWord row keys on the room's real
+    // ObjectId, never its public code — see the schema comment on
+    // Room.code for why.
+    const roomId = room.id;
 
     // Check if user is already in room
     const existingParticipant = await prisma.roomParticipant.findUnique({
@@ -139,7 +166,7 @@ export async function joinRoom(
       });
     }
 
-    logger.info("room", "Usuário entrou na sala", { userId, roomId, participantCount: room.participants.length + 1 }, userId);
+    logger.info("room", "Usuário entrou na sala", { userId, roomId, code: room.code, participantCount: room.participants.length + 1 }, userId);
     // No revalidatePath here: unlike the other actions in this file,
     // joinRoom is called directly from RoomPage's Server Component render
     // (auto-join for a visitor opening the room link) rather than from a
@@ -147,10 +174,13 @@ export async function joinRoom(
     // throw when called during render. The current request already gets
     // fresh data because RoomPage re-fetches getRoomInfo right after this
     // call; other clients are updated via the websocket emit below.
-    emitRoomUpdate(roomId);
+    // Broadcasts using the public code — every client (including this
+    // same one, via RoomLobbyClient/useRoomRealtime) subscribes to its
+    // socket channel by that same code, never the internal id.
+    emitRoomUpdate(room.code);
     return { success: true };
   } catch (error) {
-    logger.error("room", "Erro ao entrar na sala", error as Error, { userId, roomId }, userId);
+    logger.error("room", "Erro ao entrar na sala", error as Error, { roomCode }, userId);
     return { success: false, error: "Falha ao entrar na sala" };
   }
 }
@@ -161,7 +191,7 @@ export async function joinRoom(
  * client-supplied id.
  */
 export async function leaveRoom(
-  roomId: string
+  roomCode: string
 ): Promise<{ success: boolean; error?: string }> {
   const session = await auth();
   const userId = session?.user?.id;
@@ -171,6 +201,16 @@ export async function leaveRoom(
   }
 
   try {
+    const room = await prisma.room.findUnique({
+      where: { code: normalizeRoomCode(roomCode) },
+    });
+
+    if (!room) {
+      return { success: false, error: "Sala não encontrada" };
+    }
+
+    const roomId = room.id;
+
     const participant = await prisma.roomParticipant.findUnique({
       where: {
         roomId_userId: {
@@ -178,7 +218,6 @@ export async function leaveRoom(
           userId,
         },
       },
-      include: { room: true },
     });
 
     if (!participant) {
@@ -195,7 +234,7 @@ export async function leaveRoom(
     });
 
     // If host left, assign new host
-    if (participant.room.hostId === userId) {
+    if (room.hostId === userId) {
       const remainingParticipants = await prisma.roomParticipant.findFirst({
         where: {
           roomId,
@@ -213,12 +252,12 @@ export async function leaveRoom(
       }
     }
 
-    logger.info("room", "Usuário saiu da sala", { userId, roomId }, userId);
-    revalidatePath(`/room/${roomId}`);
-    emitRoomUpdate(roomId);
+    logger.info("room", "Usuário saiu da sala", { userId, roomId, code: room.code }, userId);
+    revalidatePath(`/room/${room.code}`);
+    emitRoomUpdate(room.code);
     return { success: true };
   } catch (error) {
-    logger.error("room", "Erro ao sair da sala", error as Error, { userId, roomId }, userId);
+    logger.error("room", "Erro ao sair da sala", error as Error, { userId, roomCode }, userId);
     return { success: false, error: "Falha ao sair da sala" };
   }
 }
@@ -231,10 +270,10 @@ export async function leaveRoom(
  * payload, so it would otherwise leak everyone's email to everyone else
  * in the room for no functional reason.
  */
-export async function getRoomInfo(roomId: string) {
+export async function getRoomInfo(roomCode: string) {
   try {
     const room = await prisma.room.findUnique({
-      where: { id: roomId },
+      where: { code: normalizeRoomCode(roomCode) },
       include: {
         host: {
           select: {
@@ -286,7 +325,7 @@ export async function getRoomInfo(roomId: string) {
  * client-supplied id, since the secret word is tied to a specific player.
  */
 export async function submitWord(
-  roomId: string,
+  roomCode: string,
   wordId: string,
   wordText: string
 ): Promise<{ success: boolean; error?: string }> {
@@ -305,9 +344,19 @@ export async function submitWord(
     );
 
     if (!rateLimit.allowed) {
-      logger.warn("word", "Word submission rate limit exceeded", { userId, roomId }, userId);
+      logger.warn("word", "Word submission rate limit exceeded", { userId, roomCode }, userId);
       return { success: false, error: rateLimit.message || "Limite de submissões atingido" };
     }
+
+    const room = await prisma.room.findUnique({
+      where: { code: normalizeRoomCode(roomCode) },
+    });
+
+    if (!room) {
+      return { success: false, error: "Sala não encontrada" };
+    }
+
+    const roomId = room.id;
 
     // Check if user already submitted a word for this room
     const existing = await prisma.submittedWord.findUnique({
@@ -334,11 +383,11 @@ export async function submitWord(
     });
 
     logger.info("word", "Palavra submetida", { userId, roomId, wordLength: wordText.length }, userId);
-    revalidatePath(`/room/${roomId}`);
-    emitRoomUpdate(roomId);
+    revalidatePath(`/room/${room.code}`);
+    emitRoomUpdate(room.code);
     return { success: true };
   } catch (error) {
-    logger.error("word", "Erro ao enviar palavra", error as Error, { userId, roomId }, userId);
+    logger.error("word", "Erro ao enviar palavra", error as Error, { userId, roomCode }, userId);
     return { success: false, error: "Falha ao enviar palavra" };
   }
 }
@@ -350,7 +399,7 @@ export async function submitWord(
  * participants must have submitted words.
  */
 export async function startGame(
-  roomId: string
+  roomCode: string
 ): Promise<{ success: boolean; gameId?: string; error?: string }> {
   const session = await auth();
   const userId = session?.user?.id;
@@ -362,7 +411,7 @@ export async function startGame(
   try {
     // Verify user is host
     const room = await prisma.room.findUnique({
-      where: { id: roomId },
+      where: { code: normalizeRoomCode(roomCode) },
       include: {
         participants: { where: { status: "ACTIVE" } },
         submittedWords: true,
@@ -372,6 +421,8 @@ export async function startGame(
     if (!room) {
       return { success: false, error: "Sala não encontrada" };
     }
+
+    const roomId = room.id;
 
     if (room.hostId !== userId) {
       logger.warn("security", "Non-host attempted to start game", { userId, roomId }, userId);
@@ -436,11 +487,11 @@ export async function startGame(
     });
 
     logger.info("game", "Jogo iniciado", { roomId, gameId: game.id, participantCount, totalRounds: participantCount }, userId);
-    revalidatePath(`/room/${roomId}`);
-    emitRoomUpdate(roomId);
+    revalidatePath(`/room/${room.code}`);
+    emitRoomUpdate(room.code);
     return { success: true, gameId: game.id };
   } catch (error) {
-    logger.error("game", "Erro ao iniciar jogo", error as Error, { roomId }, userId);
+    logger.error("game", "Erro ao iniciar jogo", error as Error, { roomCode }, userId);
     return { success: false, error: "Falha ao iniciar o jogo" };
   }
 }
