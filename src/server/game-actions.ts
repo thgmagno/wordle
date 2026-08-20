@@ -365,7 +365,12 @@ export async function getGameState(gameId: string) {
       }));
     }
 
-    // Don't expose answer word to client
+    // The answer is only safe to reveal once the round is truly over for
+    // everyone (round.status flips to FINISHED only once every active
+    // player has solved it or run out of attempts — see submitAttempt) —
+    // before that, only the spectator (who submitted the word) may see it.
+    const canRevealAnswer = isSpectator || round.status === "FINISHED";
+
     return {
       ...fullGame,
       rounds: [
@@ -373,7 +378,7 @@ export async function getGameState(gameId: string) {
           ...round,
           attempts: ownAttempts,
           othersProgress,
-          answerWord: isSpectator ? round.answerWord : undefined, // Show to spectator, hide to others
+          answerWord: canRevealAnswer ? round.answerWord : undefined,
         },
       ],
       isSpectator,

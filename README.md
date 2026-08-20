@@ -218,17 +218,22 @@ Comprehensive logging across 7 categories:
 
 ## API & Server Actions
 
+Every action below derives the acting user from the server-side session
+(`auth()`) instead of taking an id as a parameter — none of them trust a
+client-supplied user/host id, so impersonation isn't possible by calling
+them directly with a different id (see the security notes above).
+
 ### Room Management
-- `createRoom(hostId, wordLength)` - Create new game room
-- `joinRoom(roomId, userId)` - Join existing room
-- `leaveRoom(roomId, userId)` - Leave room
-- `submitWord(roomId, userId, wordId, wordText)` - Submit secret word
-- `startGame(roomId, hostId)` - Start the game
+- `createRoom(wordLength)` - Create new game room (caller becomes host)
+- `joinRoom(roomId)` - Join existing room
+- `leaveRoom(roomId)` - Leave room
+- `submitWord(roomId, wordId, wordText)` - Submit secret word
+- `startGame(roomId)` - Start the game (host only)
 
 ### Game Mechanics
-- `submitAttempt(roundId, userId, attemptText)` - Make a guess
-- `getGameState(gameId, userId)` - Get current game state
-- `advanceToNextRound(gameId, hostId)` - Move to next round
+- `submitAttempt(roundId, attemptText)` - Make a guess
+- `getGameState(gameId)` - Get current game state for the caller
+- `advanceToNextRound(gameId)` - Move to next round (host only)
 
 ### Dictionary & Words
 - `isWordValid(word)` - Check if word is in dictionary
@@ -239,8 +244,8 @@ Comprehensive logging across 7 categories:
 ### Ranking & Statistics
 - `getGlobalRanking(page, limit)` - Get leaderboard
 - `getUserStatistics(userId)` - Get player stats
-- `getPlayerProfile(userId)` - Get public profile
-- `updateLeaderboardVisibility(userId, show)` - Privacy control
+- `getPlayerProfile(userId)` - Get public profile (returns `null` for a user who opted out of the leaderboard, unless it's your own)
+- `updateLeaderboardVisibility(show)` - Privacy control for the caller
 
 ## Testing
 
