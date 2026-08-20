@@ -1,9 +1,9 @@
-import { type NextAuthConfig } from "next-auth";
+import NextAuth, { type NextAuthConfig } from "next-auth";
 import Google from "@auth/core/providers/google";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import { prisma } from "./prisma";
 
-export const authConfig = {
+const authConfig = {
   adapter: PrismaAdapter(prisma),
   providers: [
     Google({
@@ -35,3 +35,5 @@ export const authConfig = {
   },
   trustHost: true,
 } satisfies NextAuthConfig;
+
+export const { auth, handlers, signIn, signOut } = NextAuth(authConfig);
