@@ -4,6 +4,7 @@
  */
 
 import { prisma } from "@/lib/prisma";
+import { logger } from "@/lib/logger";
 import {
   compareNormalizedWords,
   getWordLength,
@@ -163,30 +164,34 @@ export async function validateAnswerWord(
 ): Promise<{ valid: boolean; error?: string; wordId?: string }> {
   const validation = validateWordFormat(word);
   if (!validation.valid) {
+    logger.debug("word", "Invalid word format", { word, error: validation.error });
     return { valid: false, error: validation.error };
   }
 
   if (validation.normalized && validation.normalized.length !== expectedLength) {
-    return {
-      valid: false,
-      error: `A palavra deve ter exatamente ${expectedLength} letras`,
-    };
+    const error = `A palavra deve ter exatamente ${expectedLength} letras`;
+    logger.debug("word", "Word length mismatch", { word, expectedLength, actualLength: validation.normalized.length });
+    return { valid: false, error };
   }
 
   const dbWord = await getWordByNormalized(validation.normalized!);
 
   if (!dbWord) {
+    logger.warn("word", "Word not found in dictionary", { word: validation.normalized, expectedLength }, undefined);
     return { valid: false, error: "Palavra não encontrada no dicionário" };
   }
 
   if (!dbWord.isValid) {
+    logger.warn("word", "Word marked as invalid", { word: dbWord.word, wordId: dbWord.id }, undefined);
     return { valid: false, error: "A palavra foi marcada como inválida" };
   }
 
   if (dbWord.isNegative) {
+    logger.warn("security", "Blocked word attempted as answer", { word: dbWord.word, wordId: dbWord.id }, undefined);
     return { valid: false, error: "A palavra está bloqueada" };
   }
 
+  logger.debug("word", "Answer word validated successfully", { wordId: dbWord.id, word: dbWord.word });
   return { valid: true, wordId: dbWord.id };
 }
 
@@ -199,23 +204,25 @@ export async function validateAttemptWord(
 ): Promise<{ valid: boolean; error?: string }> {
   const validation = validateWordFormat(word);
   if (!validation.valid) {
+    logger.debug("word", "Invalid attempt word format", { word, error: validation.error });
     return { valid: false, error: validation.error };
   }
 
   if (validation.normalized && validation.normalized.length !== expectedLength) {
-    return {
-      valid: false,
-      error: `A palavra deve ter exatamente ${expectedLength} letras`,
-    };
+    const error = `A palavra deve ter exatamente ${expectedLength} letras`;
+    logger.debug("word", "Attempt word length mismatch", { word, expectedLength, actualLength: validation.normalized.length });
+    return { valid: false, error };
   }
 
   const dbWord = await getWordByNormalized(validation.normalized!);
 
   if (!dbWord) {
+    logger.info("word", "Non-dictionary word attempted", { word: validation.normalized, expectedLength });
     return { valid: false, error: "Palavra não encontrada no dicionário" };
   }
 
   if (dbWord.isNegative) {
+    logger.warn("security", "Blocked word attempted in game", { word: dbWord.word, wordId: dbWord.id }, undefined);
     return { valid: false, error: "A palavra está bloqueada" };
   }
 
