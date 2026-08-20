@@ -1,6 +1,8 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
+import { checkRateLimit, RATE_LIMIT_CONFIGS } from "@/lib/rate-limit";
+import { logger } from "@/lib/logger";
 import { revalidatePath } from "next/cache";
 
 /**
@@ -17,6 +19,17 @@ export async function createRoom(
 
     if (![4, 5, 6].includes(wordLength)) {
       return { success: false, error: "O comprimento da palavra deve ser 4, 5 ou 6" };
+    }
+
+    // Check rate limit for room creation
+    const rateLimit = await checkRateLimit(
+      `create-room-${hostId}`,
+      RATE_LIMIT_CONFIGS.ROOM_CREATION
+    );
+
+    if (!rateLimit.allowed) {
+      logger.warn("room", "Room creation rate limit exceeded", { userId: hostId }, hostId);
+      return { success: false, error: rateLimit.message || "Limite de criação de salas atingido" };
     }
 
     // Create room
@@ -38,10 +51,11 @@ export async function createRoom(
       },
     });
 
+    logger.info("room", "Sala criada", { roomId: room.id, hostId, wordLength }, hostId);
     revalidatePath("/");
     return { success: true, roomId: room.id };
   } catch (error) {
-    console.error("Error creating room:", error);
+    logger.error("room", "Erro ao criar sala", error as Error, { hostId }, hostId);
     return { success: false, error: "Falha ao criar sala" };
   }
 }
@@ -107,10 +121,11 @@ export async function joinRoom(
       });
     }
 
+    logger.info("room", "Usuário entrou na sala", { userId, roomId, participantCount: room.participants.length + 1 }, userId);
     revalidatePath(`/room/${roomId}`);
     return { success: true };
   } catch (error) {
-    console.error("Error joining room:", error);
+    logger.error("room", "Erro ao entrar na sala", error as Error, { userId, roomId }, userId);
     return { success: false, error: "Falha ao entrar na sala" };
   }
 }
@@ -161,13 +176,15 @@ export async function leaveRoom(
           where: { id: roomId },
           data: { hostId: remainingParticipants.userId },
         });
+        logger.info("room", "Anfitrião trocado", { oldHostId: userId, newHostId: remainingParticipants.userId, roomId }, userId);
       }
     }
 
+    logger.info("room", "Usuário saiu da sala", { userId, roomId }, userId);
     revalidatePath(`/room/${roomId}`);
     return { success: true };
   } catch (error) {
-    console.error("Error leaving room:", error);
+    logger.error("room", "Erro ao sair da sala", error as Error, { userId, roomId }, userId);
     return { success: false, error: "Falha ao sair da sala" };
   }
 }
@@ -232,6 +249,17 @@ export async function submitWord(
   wordText: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    // Check rate limit for word submission
+    const rateLimit = await checkRateLimit(
+      `submit-word-${userId}`,
+      RATE_LIMIT_CONFIGS.WORD_SUBMISSION
+    );
+
+    if (!rateLimit.allowed) {
+      logger.warn("word", "Word submission rate limit exceeded", { userId, roomId }, userId);
+      return { success: false, error: rateLimit.message || "Limite de submissões atingido" };
+    }
+
     // Check if user already submitted a word for this room
     const existing = await prisma.submittedWord.findUnique({
       where: {
@@ -256,10 +284,11 @@ export async function submitWord(
       },
     });
 
+    logger.info("word", "Palavra submetida", { userId, roomId, wordLength: wordText.length }, userId);
     revalidatePath(`/room/${roomId}`);
     return { success: true };
   } catch (error) {
-    console.error("Error submitting word:", error);
+    logger.error("word", "Erro ao enviar palavra", error as Error, { userId, roomId }, userId);
     return { success: false, error: "Falha ao enviar palavra" };
   }
 }
@@ -287,6 +316,7 @@ export async function startGame(
     }
 
     if (room.hostId !== userId) {
+      logger.warn("security", "Non-host attempted to start game", { userId, roomId }, userId);
       return { success: false, error: "Apenas o anfitrião pode iniciar o jogo" };
     }
 
@@ -328,10 +358,11 @@ export async function startGame(
       },
     });
 
+    logger.info("game", "Jogo iniciado", { roomId, gameId: game.id, participantCount, totalRounds: participantCount }, userId);
     revalidatePath(`/room/${roomId}`);
     return { success: true, gameId: game.id };
   } catch (error) {
-    console.error("Error starting game:", error);
+    logger.error("game", "Erro ao iniciar jogo", error as Error, { roomId }, userId);
     return { success: false, error: "Falha ao iniciar o jogo" };
   }
 }
