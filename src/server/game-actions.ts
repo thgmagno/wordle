@@ -8,6 +8,7 @@ import {
   haveAllPlayersFinishedRound,
 } from "@/lib/wordle-evaluation";
 import { validateAttemptWord } from "@/server/word-service";
+import { normalizeWord } from "@/lib/word-normalization";
 import { checkRateLimit, RATE_LIMIT_CONFIGS } from "@/lib/rate-limit";
 import { logger } from "@/lib/logger";
 import { revalidatePath } from "next/cache";
@@ -296,6 +297,111 @@ export async function submitAttempt(
   }
 }
 
+const MAX_HINT_LENGTH = 140;
+
+/**
+ * Send a hint from the round's spectator (the player whose word is being
+ * used this round — see Round.wordOwnerId) to the players actively
+ * guessing it. The spectator is always the currently authenticated user —
+ * never a client-supplied id — and must actually be this round's word
+ * owner; nobody else is allowed to inject messages into another player's
+ * round.
+ */
+export async function sendRoundHint(
+  roundId: string,
+  text: string
+): Promise<{
+  success: boolean;
+  hint?: { id: string; text: string; createdAt: Date };
+  error?: string;
+}> {
+  const session = await auth();
+  const userId = session?.user?.id;
+
+  if (!userId) {
+    return { success: false, error: "Você precisa estar autenticado" };
+  }
+
+  try {
+    const rateLimit = await checkRateLimit(
+      `round-hint-${userId}`,
+      RATE_LIMIT_CONFIGS.ROUND_HINT
+    );
+
+    if (!rateLimit.allowed) {
+      logger.warn("game", "Round hint rate limit exceeded", { userId, roundId }, userId);
+      return { success: false, error: rateLimit.message || "Aguarde antes de enviar outra dica" };
+    }
+
+    const round = await prisma.round.findUnique({ where: { id: roundId } });
+
+    if (!round) {
+      return { success: false, error: "Rodada não encontrada" };
+    }
+
+    // Only the spectator (the word's owner) may send hints for this round —
+    // an active player has no business injecting messages into their own
+    // round, and a player from a different round/game entirely definitely
+    // doesn't.
+    if (round.wordOwnerId !== userId) {
+      logger.warn(
+        "security",
+        "Non-spectator attempted to send a round hint",
+        { userId, roundId, wordOwnerId: round.wordOwnerId },
+        userId
+      );
+      return { success: false, error: "Apenas o espectador desta rodada pode enviar dicas" };
+    }
+
+    if (round.status !== "ACTIVE") {
+      return { success: false, error: "A rodada não está mais ativa" };
+    }
+
+    const trimmed = text.trim();
+    if (!trimmed) {
+      return { success: false, error: "A dica não pode estar vazia" };
+    }
+    if (trimmed.length > MAX_HINT_LENGTH) {
+      return {
+        success: false,
+        error: `A dica deve ter no máximo ${MAX_HINT_LENGTH} caracteres`,
+      };
+    }
+
+    // A spectator handing out the secret word itself (or hiding it inside a
+    // longer message) wouldn't be a "hint" — it would just leak the answer
+    // and trivialize the round for everyone still guessing.
+    const normalizedHint = normalizeWord(trimmed);
+    const normalizedAnswer = normalizeWord(round.answerWord);
+    if (normalizedHint.includes(normalizedAnswer)) {
+      logger.warn(
+        "security",
+        "Hint attempted to leak the round's answer word",
+        { userId, roundId },
+        userId
+      );
+      return { success: false, error: "A dica não pode revelar a palavra secreta" };
+    }
+
+    const hint = await prisma.roundHint.create({
+      data: { roundId, authorId: userId, text: trimmed },
+    });
+
+    logger.info("game", "Dica enviada pelo espectador", { userId, roundId, hintId: hint.id }, userId);
+
+    revalidatePath(`/game/${round.gameId}`);
+    emitGameUpdate(round.gameId);
+
+    return {
+      success: true,
+      hint: { id: hint.id, text: hint.text, createdAt: hint.createdAt },
+    };
+  } catch (error) {
+    logger.error("game", "Erro ao enviar dica", error as Error, { userId, roundId }, userId);
+    return { success: false, error: "Falha ao enviar dica" };
+  }
+}
+
 /**
  * Get game state for a player.
  * The player is always the currently authenticated user — never a
@@ -350,6 +456,13 @@ export async function getGameState(gameId: string) {
                 user: { select: { id: true, name: true, image: true } },
               },
               orderBy: { attemptNumber: "asc" },
+            },
+            // Hints aren't sensitive the way the answer word is — they're
+            // an intentional message from the spectator to the active
+            // players, so every caller gets the full list, not just the
+            // spectator's own view.
+            hints: {
+              orderBy: { createdAt: "asc" },
             },
           },
         },

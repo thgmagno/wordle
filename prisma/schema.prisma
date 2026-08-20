@@ -30,6 +30,7 @@ model User {
   matchScores           MatchScore[]
   statistics            UserStatistics?
   roundAttempts         RoundAttempt[]
+  roundHints            RoundHint[]
   singlePlayerGames     SinglePlayerGame[]
   singlePlayerStatistics SinglePlayerStatistics?
 
@@ -212,6 +213,7 @@ model Round {
   game     Game       @relation(fields: [gameId], references: [id], onDelete: Cascade)
   answerWordRef Word  @relation("RoundAnswer", fields: [answerWordId], references: [id])
   attempts RoundAttempt[]
+  hints    RoundHint[]
 
   @@unique([gameId, roundNumber])
   @@index([gameId])
@@ -240,6 +242,26 @@ model RoundAttempt {
 
   @@index([roundId])
   @@index([userId])
+}
+
+// A free-text hint the round's spectator (the word's owner — see
+// Round.wordOwnerId) can send to the players actively guessing. Kept as
+// its own model rather than a plain string array embedded on Round so each
+// hint carries its own timestamp and author, and so it participates in the
+// same "server is authoritative" pattern as RoundAttempt — sendRoundHint
+// verifies the caller actually IS the round's spectator before writing one.
+model RoundHint {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  roundId   String   @db.ObjectId
+  authorId  String   @db.ObjectId
+  text      String
+  createdAt DateTime @default(now())
+
+  // Relations
+  round  Round @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  author User  @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([roundId])
 }
 
 type AttemptResult {

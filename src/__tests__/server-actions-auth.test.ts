@@ -24,6 +24,7 @@ import {
   getRoundInfo,
   getUserAttempts,
   advanceToNextRound,
+  sendRoundHint,
 } from "@/server/game-actions";
 import { updateLeaderboardVisibility } from "@/server/ranking-actions";
 import {
@@ -86,6 +87,13 @@ describe("Server Actions reject unauthenticated callers", () => {
 
   it("advanceToNextRound", async () => {
     await expect(advanceToNextRound("game-1")).resolves.toEqual({
+      success: false,
+      error: UNAUTHENTICATED_ERROR,
+    });
+  });
+
+  it("sendRoundHint", async () => {
+    await expect(sendRoundHint("round-1", "começa com C")).resolves.toEqual({
       success: false,
       error: UNAUTHENTICATED_ERROR,
     });
