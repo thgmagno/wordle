@@ -7,7 +7,6 @@ generator client {
 
 datasource db {
   provider = "mongodb"
-  url      = env("DATABASE_URL")
 }
 
 // ===== AUTHENTICATION =====
@@ -32,7 +31,6 @@ model User {
   statistics            UserStatistics?
   roundAttempts         RoundAttempt[]
 
-  @@index([email])
   @@index([showInLeaderboard])
 }
 
@@ -66,7 +64,6 @@ model Session {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
-  @@index([sessionToken])
 }
 
 // ===== DICTIONARY/WORDS =====
@@ -89,7 +86,6 @@ model Word {
   roundAnswers   Round[]         @relation("RoundAnswer")
 
   @@index([length])
-  @@index([normalizedWord])
   @@index([isNegative])
   @@index([isValid])
   @@index([length, isValid])
@@ -182,7 +178,6 @@ model Game {
   room   Room    @relation(fields: [roomId], references: [id], onDelete: Cascade)
   rounds Round[]
 
-  @@index([roomId])
   @@index([status])
 }
 

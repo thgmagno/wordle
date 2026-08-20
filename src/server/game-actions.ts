@@ -60,7 +60,7 @@ export async function submitAttempt(
 
     const attemptCount = previousAttempts.length;
     const normalizedWord = attemptText.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
-    const normalizedPrevious = previousAttempts.map((a) =>
+    const normalizedPrevious = previousAttempts.map((a: any) =>
       a.attemptText.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "")
     );
 
@@ -162,7 +162,15 @@ export async function submitAttempt(
  */
 export async function getGameState(gameId: string, userId: string) {
   try {
-    const game = await prisma.game.findUnique({
+    const gameData = await prisma.game.findUnique({
+      where: { id: gameId },
+    });
+
+    if (!gameData) {
+      return null;
+    }
+
+    const fullGame = await prisma.game.findUnique({
       where: { id: gameId },
       include: {
         room: {
@@ -181,7 +189,7 @@ export async function getGameState(gameId: string, userId: string) {
           },
         },
         rounds: {
-          where: { roundNumber: game.currentRound },
+          where: { roundNumber: gameData.currentRound },
           include: {
             attempts: {
               where: { userId },
@@ -191,18 +199,18 @@ export async function getGameState(gameId: string, userId: string) {
       },
     });
 
-    if (!game || !game.rounds[0]) {
+    if (!fullGame || !fullGame.rounds[0]) {
       return null;
     }
 
-    const round = game.rounds[0];
+    const round = fullGame.rounds[0];
 
     // Check if user is spectator for this round
     const isSpectator = round.wordOwnerId === userId;
 
     // Don't expose answer word to client
     return {
-      ...game,
+      ...fullGame,
       rounds: [
         {
           ...round,
@@ -322,8 +330,8 @@ export async function advanceToNextRound(gameId: string, hostUserId: string): Pr
       select: { answerWordId: true },
     });
 
-    const usedWordIds = previousRounds.map((r) => r.answerWordId);
-    const availableWords = submittedWords.filter((w) => !usedWordIds.includes(w.wordId));
+    const usedWordIds = previousRounds.map((r: any) => r.answerWordId);
+    const availableWords = submittedWords.filter((w: any) => !usedWordIds.includes(w.wordId));
 
     if (availableWords.length === 0) {
       return { success: false, error: "No new words available for next round" };

@@ -68,7 +68,7 @@ export async function getRandomWords(
 ) {
   return prisma.word.findMany({
     where: {
-      length,
+      length: parseInt(String(length), 10),
       isValid: true,
       isNegative: false,
       id: excludeIds.length > 0 ? { notIn: excludeIds } : undefined,
@@ -82,7 +82,8 @@ export async function getRandomWords(
  * Get words by length
  */
 export async function getWordsByLength(length: number, limit: number = 100) {
-  if (!isValidWordLength(length)) {
+  const validLengths = [4, 5, 6];
+  if (!validLengths.includes(length)) {
     throw new Error(`Invalid word length: ${length}. Must be 4, 5, or 6.`);
   }
 

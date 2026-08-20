@@ -45,7 +45,7 @@ export async function getGlobalRanking(
       take: limit,
     });
 
-    const items = rankings.map((stat, index) => ({
+    const items = rankings.map((stat: any, index: number) => ({
       rank: skip + index + 1,
       user: stat.user,
       statistics: {

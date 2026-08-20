@@ -214,7 +214,7 @@ export async function getRoomInfo(roomId: string) {
     return {
       ...room,
       participantCount: room.participants.length,
-      wordSubmittedBy: room.submittedWords.map((w) => w.userId),
+      wordSubmittedBy: room.submittedWords.map((w: any) => w.userId),
     };
   } catch (error) {
     console.error("Error getting room info:", error);
