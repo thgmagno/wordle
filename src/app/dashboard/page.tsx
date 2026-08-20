@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import Link from "next/link";
+import { JoinRoomButton } from "@/components/join-room-button";
 
 export default async function DashboardPage() {
   const session = await auth();
@@ -53,17 +54,7 @@ export default async function DashboardPage() {
               <p className="text-slate-600 dark:text-slate-400 mb-6">
                 Entre em uma sala existente usando o código da sala
               </p>
-              <button
-                onClick={() => {
-                  const roomId = prompt("Digite o ID da sala:");
-                  if (roomId) {
-                    window.location.href = `/room/${roomId}`;
-                  }
-                }}
-                className="btn-primary"
-              >
-                Entrar em Sala
-              </button>
+              <JoinRoomButton />
             </div>
 
             {/* Leaderboard */}
