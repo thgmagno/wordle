@@ -1,5 +1,5 @@
 import { auth } from "@/lib/auth";
-import { getUserStatistics, getUserRankingPosition } from "@/server/ranking-actions";
+import { getPlayerProfile } from "@/server/ranking-actions";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import ProfileClient from "@/components/profile-client";
@@ -7,17 +7,15 @@ import ProfileClient from "@/components/profile-client";
 export default async function ProfilePage() {
   const session = await auth();
 
-  if (!session?.user) {
+  if (!session?.user?.id) {
     redirect("/auth/signin");
   }
 
-  const userId = session.user.id || "";
-  if (!userId) {
-    redirect("/auth/signin");
-  }
-
-  const stats = await getUserStatistics(userId);
-  const rankPosition = await getUserRankingPosition(userId) || null;
+  const userId = session.user.id;
+  const profile = await getPlayerProfile(userId);
+  const stats = profile?.statistics ?? null;
+  const rankPosition = profile?.rank ?? null;
+  const showInLeaderboard = profile?.user.showInLeaderboard ?? true;
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -128,7 +126,7 @@ export default async function ProfilePage() {
                   </div>
                 )}
 
-                {!stats || !stats.totalGamesPlayed || stats.totalGamesPlayed === 0 && (
+                {(!stats || !stats.totalGamesPlayed) && (
                   <div className="text-center py-8 text-slate-600 dark:text-slate-400">
                     <p>Você ainda não jogou nenhuma partida.</p>
                     <Link href="/dashboard" className="text-blue-600 dark:text-blue-400 hover:underline">
@@ -144,7 +142,7 @@ export default async function ProfilePage() {
               <div className="card">
                 <h2 className="text-2xl font-bold mb-6">Configurações</h2>
 
-                <ProfileClient userId={userId} />
+                <ProfileClient initialShowInLeaderboard={showInLeaderboard} />
               </div>
             </div>
           </div>
