@@ -269,8 +269,16 @@ export async function getGameState(gameId: string) {
         rounds: {
           where: { roundNumber: gameData.currentRound },
           include: {
+            // Fetch every attempt in the round (not just this caller's) so
+            // the spectator branch below can build a live view of what
+            // everyone else is doing. Non-spectator callers still only get
+            // their own attempts back, via the ownAttempts filter — this
+            // does not change what an active player sees.
             attempts: {
-              where: { userId },
+              include: {
+                user: { select: { id: true, name: true, image: true } },
+              },
+              orderBy: { attemptNumber: "asc" },
             },
           },
         },
@@ -286,12 +294,41 @@ export async function getGameState(gameId: string) {
     // Check if user is spectator for this round
     const isSpectator = round.wordOwnerId === userId;
 
+    const ownAttempts = round.attempts.filter((a: any) => a.userId === userId);
+
+    // The spectator's word is the round's answer, so seeing other players'
+    // guesses (word + correctness pattern) doesn't expose anything they
+    // don't already know — CLAUDE.md section 19 explicitly expects the
+    // spectator to be able to follow along. Grouped per player so the UI
+    // can render one board per active player.
+    let othersProgress:
+      | Array<{
+          user: { id: string; name: string | null; image: string | null };
+          attempts: typeof round.attempts;
+        }>
+      | undefined;
+
+    if (isSpectator) {
+      const byUser = new Map<string, typeof round.attempts>();
+      for (const attempt of round.attempts) {
+        const list = byUser.get(attempt.userId) ?? [];
+        list.push(attempt);
+        byUser.set(attempt.userId, list);
+      }
+      othersProgress = Array.from(byUser.values()).map((playerAttempts) => ({
+        user: playerAttempts[0].user,
+        attempts: playerAttempts,
+      }));
+    }
+
     // Don't expose answer word to client
     return {
       ...fullGame,
       rounds: [
         {
           ...round,
+          attempts: ownAttempts,
+          othersProgress,
           answerWord: isSpectator ? round.answerWord : undefined, // Show to spectator, hide to others
         },
       ],
