@@ -138,7 +138,7 @@ export default async function RoomPage({
           </Link>
           <div className="flex items-center gap-4">
             <span className="text-sm text-slate-600 dark:text-slate-400">
-              Sala: {roomId.substring(0, 8)}...
+              Código: <span className="font-mono font-semibold">{room.code}</span>
             </span>
             <ThemeToggle />
           </div>
@@ -146,8 +146,13 @@ export default async function RoomPage({
       </header>
 
       {/* Main Content */}
+      {/* room.code (not the raw roomId URL param) is what's passed down:
+          it's the DB's canonical, already-uppercased form, so the client
+          component's realtime socket channel and every server action call
+          it makes stay consistent regardless of what casing the visitor
+          typed into the URL bar. */}
       <main className="flex-1 container mx-auto px-4 py-12">
-        <RoomLobbyClient roomId={roomId} room={room} currentUserId={currentUserId} />
+        <RoomLobbyClient roomId={room.code} room={room} currentUserId={currentUserId} />
       </main>
     </div>
   );
