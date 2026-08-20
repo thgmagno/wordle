@@ -4,14 +4,19 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import GameBoardClient from "@/components/game-board-client";
 
-export default async function GamePage({ params }: { params: { gameId: string } }) {
+export default async function GamePage({
+  params,
+}: {
+  params: Promise<{ gameId: string }>;
+}) {
+  const { gameId } = await params;
   const session = await auth();
 
   if (!session?.user) {
     redirect("/auth/signin");
   }
 
-  const gameState = await getGameState(params.gameId);
+  const gameState = await getGameState(gameId);
 
   if (!gameState) {
     return (
@@ -65,7 +70,7 @@ export default async function GamePage({ params }: { params: { gameId: string } 
       {/* Main Content */}
       <main className="flex-1 container mx-auto px-4 py-8 max-w-2xl">
         <GameBoardClient
-          gameId={params.gameId}
+          gameId={gameId}
           gameState={gameState}
           currentUserId={session.user.id || ""}
           isHost={gameState.room?.host?.id === session.user.id}

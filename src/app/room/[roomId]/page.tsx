@@ -36,7 +36,12 @@ function RoomUnavailable({ title, message }: { title: string; message: string })
   );
 }
 
-export default async function RoomPage({ params }: { params: { roomId: string } }) {
+export default async function RoomPage({
+  params,
+}: {
+  params: Promise<{ roomId: string }>;
+}) {
+  const { roomId } = await params;
   const session = await auth();
 
   if (!session?.user?.id) {
@@ -45,7 +50,7 @@ export default async function RoomPage({ params }: { params: { roomId: string } 
 
   const currentUserId = session.user.id;
 
-  let room = await getRoomInfo(params.roomId);
+  let room = await getRoomInfo(roomId);
 
   if (!room) {
     return (
@@ -74,7 +79,7 @@ export default async function RoomPage({ params }: { params: { roomId: string } 
       );
     }
 
-    const joinResult = await joinRoom(params.roomId);
+    const joinResult = await joinRoom(roomId);
 
     if (!joinResult.success) {
       return (
@@ -85,7 +90,7 @@ export default async function RoomPage({ params }: { params: { roomId: string } 
       );
     }
 
-    const refreshed = await getRoomInfo(params.roomId);
+    const refreshed = await getRoomInfo(roomId);
 
     if (!refreshed) {
       return (
@@ -108,14 +113,14 @@ export default async function RoomPage({ params }: { params: { roomId: string } 
             Wordle
           </Link>
           <span className="text-sm text-slate-600 dark:text-slate-400">
-            Sala: {params.roomId.substring(0, 8)}...
+            Sala: {roomId.substring(0, 8)}...
           </span>
         </div>
       </header>
 
       {/* Main Content */}
       <main className="flex-1 container mx-auto px-4 py-12">
-        <RoomLobbyClient roomId={params.roomId} room={room} currentUserId={currentUserId} />
+        <RoomLobbyClient roomId={roomId} room={room} currentUserId={currentUserId} />
       </main>
     </div>
   );
