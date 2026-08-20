@@ -22,9 +22,11 @@ describe("Wordle Evaluation", () => {
     });
 
     it("should mark present letters as PRESENT", () => {
-      const result = evaluateAttempt("plato", "portal");
-      // P-O-R-T-A-L exist in answer but not all in correct positions
+      const result = evaluateAttempt("abcde", "eabcd");
+      // Every letter of the guess exists in the answer, but shifted by one
+      // position, so none of them land as CORRECT — only PRESENT.
       expect(result.some((r) => r.status === "PRESENT")).toBe(true);
+      expect(result.some((r) => r.status === "CORRECT")).toBe(false);
     });
 
     it("should mark absent letters as ABSENT", () => {
@@ -33,12 +35,16 @@ describe("Wordle Evaluation", () => {
     });
 
     it("should handle repeated letters correctly - more in guess than answer", () => {
-      const result = evaluateAttempt("speed", "erase");
-      // E appears 2x in guess but only 2x in answer
-      // First E (pos 2) is CORRECT
-      // Second E (pos 3) should be ABSENT because all E's in answer are accounted for
-      const firstE = result[2];
-      expect(firstE.status).toBe("CORRECT");
+      // Answer has "a" only twice (positions 0-1); the guess is all "a"s.
+      // Per CLAUDE.md's rule, only as many occurrences as exist in the
+      // answer may be marked — here the two in the correct position are
+      // CORRECT, the three extra "a"s must be ABSENT, never CORRECT/PRESENT.
+      const result = evaluateAttempt("aaaaa", "aabbc");
+      expect(result[0].status).toBe("CORRECT");
+      expect(result[1].status).toBe("CORRECT");
+      expect(result[2].status).toBe("ABSENT");
+      expect(result[3].status).toBe("ABSENT");
+      expect(result[4].status).toBe("ABSENT");
     });
 
     it("should handle repeated letters correctly - fewer in guess than answer", () => {

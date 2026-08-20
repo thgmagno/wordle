@@ -7,6 +7,8 @@
     "build": "next build",
     "start": "NODE_ENV=production node server.js",
     "lint": "biome check",
+    "test": "jest",
+    "test:watch": "jest --watch",
     "format": "biome format --write",
     "db:push": "prisma db push",
     "db:studio": "prisma studio",
@@ -42,6 +44,7 @@
   "devDependencies": {
     "@biomejs/biome": "2.4.2",
     "@tailwindcss/postcss": "^4",
+    "@types/jest": "^30.0.0",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
@@ -49,6 +52,7 @@
     "@types/socket.io-client": "^3.0.0",
     "babel-plugin-react-compiler": "1.0.0",
     "dotenv": "^17.4.2",
+    "jest": "^30.4.2",
     "prisma": "^6.19.3",
     "tailwindcss": "^4",
     "typescript": "^5"
