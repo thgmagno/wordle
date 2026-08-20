@@ -61,14 +61,21 @@ export function WordleGrid({
   }, [wordLength, attempts, currentAttempt, maxAttempts]);
 
   return (
-    <div className="flex flex-col gap-2">
+    // Tiles are sized by flex-1 (share of the row's own width) instead of a
+    // fixed px width: with a fixed size, a 6-letter grid plus its gaps
+    // doesn't fit inside a narrow phone's viewport (e.g. 6 * 56px + 5 * 8px
+    // = 376px, wider than a 360px screen minus the page's own padding) and
+    // overflows horizontally. max-w-xs caps how large tiles get on desktop;
+    // min-w-0 stops flex's default content-based minimum width from
+    // fighting the shrink on the narrowest phones.
+    <div className="flex flex-col gap-1.5 sm:gap-2 w-full max-w-xs mx-auto">
       {gridData.map((row, rowIndex) => (
-        <div key={rowIndex} className="flex gap-2">
+        <div key={rowIndex} className="flex gap-1.5 sm:gap-2">
           {row.map((tile, colIndex) => (
             <div
               key={`${rowIndex}-${colIndex}`}
               className={`
-                wordle-tile w-14 h-14 sm:w-16 sm:h-16
+                wordle-tile flex-1 min-w-0
                 ${tile.status === "correct" ? "wordle-tile correct" : ""}
                 ${tile.status === "present" ? "wordle-tile present" : ""}
                 ${tile.status === "absent" ? "wordle-tile absent" : ""}

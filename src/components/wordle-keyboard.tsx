@@ -77,25 +77,25 @@ export function WordleKeyboard({
   };
 
   return (
-    <div className="flex flex-col gap-2 w-full max-w-2xl mx-auto px-2">
+    // Every key gets the SAME size — a clamp() between a floor and a
+    // ceiling, scaled by viewport width — regardless of which row it's
+    // in. Sizing keys with flex-1 (a share of their own row's width)
+    // looks right for the top row but makes the shorter rows' keys
+    // visibly *wider* than the top row's, since flex-1 divides each row's
+    // width by only that row's own key count (10 in the top row, 9 in the
+    // middle, 8 in the bottom with backspace) instead of a shared size.
+    // flex-none plus justify-center on each row reproduces the classic
+    // Wordle keyboard look instead: identical key size everywhere, and
+    // shorter rows just end up centered.
+    <div className="flex flex-col gap-1.5 w-full max-w-2xl mx-auto px-1 sm:px-2">
       {KEYBOARD_ROWS.map((row, rowIndex) => (
-        <div key={rowIndex} className="flex gap-1 justify-center">
-          {rowIndex === KEYBOARD_ROWS.length - 1 && (
-            <button
-              onClick={() => onKeyPress("enter")}
-              disabled={disabled}
-              className="keyboard-key px-4 flex-grow"
-            >
-              Enter
-            </button>
-          )}
-
+        <div key={rowIndex} className="flex gap-1 sm:gap-1.5 justify-center">
           {row.map((key) => (
             <button
               key={key}
               onClick={() => onKeyPress(key)}
               disabled={disabled}
-              className={getKeyClass(key)}
+              className={`${getKeyClass(key)} flex-none w-[clamp(1.75rem,8.5vw,2.75rem)] h-11 sm:h-12 px-0 flex items-center justify-center`}
             >
               {key.toUpperCase()}
             </button>
@@ -105,9 +105,10 @@ export function WordleKeyboard({
             <button
               onClick={() => onKeyPress("backspace")}
               disabled={disabled}
-              className="keyboard-key px-4 flex-grow"
+              aria-label="Apagar letra"
+              className="keyboard-key flex-none w-[clamp(2.75rem,13vw,4rem)] h-11 sm:h-12 px-0 flex items-center justify-center"
             >
-              ← Back
+              ⌫
             </button>
           )}
         </div>
