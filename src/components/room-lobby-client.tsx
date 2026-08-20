@@ -1,0 +1,300 @@
+"use client";
+
+import { useState, useEffect } from "react";
+import { submitWord, startGame, leaveRoom } from "@/server/room-actions";
+import { validateAnswerWord } from "@/server/word-service";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+
+interface RoomInfo {
+  id: string;
+  hostId: string;
+  status: string;
+  wordLength: number;
+  maxPlayers: number;
+  participantCount: number;
+  host: { id: string; name: string | null; image: string | null };
+  participants: any[];
+  wordSubmittedBy: string[];
+}
+
+export default function RoomLobbyClient({
+  roomId,
+  room,
+  currentUserId,
+}: {
+  roomId: string;
+  room: RoomInfo;
+  currentUserId: string;
+}) {
+  const router = useRouter();
+  const [word, setWord] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [hasSubmittedWord, setHasSubmittedWord] = useState(
+    room.wordSubmittedBy.includes(currentUserId)
+  );
+  const isHost = room.hostId === currentUserId;
+
+  const handleSubmitWord = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setSuccess(null);
+    setIsLoading(true);
+
+    try {
+      // First validate the word
+      const validation = await validateAnswerWord(word, room.wordLength);
+
+      if (!validation.valid) {
+        setError(validation.error || "Palavra inválida");
+        setIsLoading(false);
+        return;
+      }
+
+      // Then submit it
+      const result = await submitWord(roomId, currentUserId, validation.wordId || "", word);
+
+      if (result.success) {
+        setSuccess("Palavra enviada com sucesso!");
+        setWord("");
+        setHasSubmittedWord(true);
+      } else {
+        setError(result.error || "Erro ao enviar palavra");
+      }
+    } catch (err) {
+      setError("Erro ao validar palavra");
+      console.error(err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleStartGame = async () => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const result = await startGame(roomId, currentUserId);
+
+      if (result.success && result.gameId) {
+        router.push(`/game/${result.gameId}`);
+      } else {
+        setError(result.error || "Erro ao iniciar jogo");
+      }
+    } catch (err) {
+      setError("Erro ao iniciar jogo");
+      console.error(err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleLeaveRoom = async () => {
+    if (confirm("Deseja sair da sala?")) {
+      setIsLoading(true);
+      try {
+        await leaveRoom(roomId, currentUserId);
+        router.push("/dashboard");
+      } catch (err) {
+        setError("Erro ao sair da sala");
+        setIsLoading(false);
+      }
+    }
+  };
+
+  const allPlayersSubmitted =
+    room.participantCount > 0 && room.wordSubmittedBy.length === room.participantCount;
+
+  return (
+    <div className="max-w-4xl mx-auto">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Sidebar - Room Info */}
+        <div className="lg:col-span-1">
+          {/* Room Details */}
+          <div className="card mb-6">
+            <h3 className="text-lg font-semibold mb-4">Informações da Sala</h3>
+            <div className="space-y-3 text-sm">
+              <div>
+                <p className="text-slate-600 dark:text-slate-400">ID da Sala</p>
+                <p className="font-mono text-xs bg-slate-100 dark:bg-slate-700 p-2 rounded">
+                  {roomId}
+                </p>
+              </div>
+              <div>
+                <p className="text-slate-600 dark:text-slate-400">Tamanho da Palavra</p>
+                <p className="text-lg font-bold text-blue-600">{room.wordLength} letras</p>
+              </div>
+              <div>
+                <p className="text-slate-600 dark:text-slate-400">Anfitrião</p>
+                <p className="font-semibold">{room.host.name || "Desconhecido"}</p>
+              </div>
+              <div>
+                <p className="text-slate-600 dark:text-slate-400">Status da Sala</p>
+                <p className="font-semibold">
+                  {room.status === "LOBBY" ? "Aguardando..." : "Em Progresso"}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Participants */}
+          <div className="card">
+            <h3 className="text-lg font-semibold mb-4">
+              Participantes ({room.participantCount}/{room.maxPlayers})
+            </h3>
+            <div className="space-y-2">
+              {room.participants.map((participant: any) => (
+                <div
+                  key={participant.userId}
+                  className="flex items-center gap-2 p-2 bg-slate-50 dark:bg-slate-700 rounded"
+                >
+                  {participant.user.image && (
+                    <img
+                      src={participant.user.image}
+                      alt={participant.user.name}
+                      className="w-6 h-6 rounded-full"
+                    />
+                  )}
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold">
+                      {participant.user.name || "Usuário"}
+                    </p>
+                  </div>
+                  {room.wordSubmittedBy.includes(participant.userId) && (
+                    <span className="text-xs bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-300 px-2 py-1 rounded">
+                      ✓ Palavra enviada
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Main Content - Word Submission */}
+        <div className="lg:col-span-2">
+          {room.status === "LOBBY" ? (
+            <>
+              {/* Word Submission Form */}
+              {!hasSubmittedWord && (
+                <div className="card mb-6">
+                  <h3 className="text-2xl font-semibold mb-6">Envie sua Palavra Secreta</h3>
+                  <p className="text-slate-600 dark:text-slate-400 mb-6">
+                    Escolha uma palavra com exatamente {room.wordLength} letras em português.
+                    Esta será a palavra que os outros jogadores tentarão descobrir em uma das rodadas.
+                  </p>
+
+                  {error && (
+                    <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-800 dark:text-red-300 px-4 py-3 rounded-lg mb-4">
+                      {error}
+                    </div>
+                  )}
+
+                  {success && (
+                    <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-green-800 dark:text-green-300 px-4 py-3 rounded-lg mb-4">
+                      {success}
+                    </div>
+                  )}
+
+                  <form onSubmit={handleSubmitWord} className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-semibold mb-2">Palavra</label>
+                      <input
+                        type="text"
+                        value={word}
+                        onChange={(e) => setWord(e.target.value)}
+                        maxLength={room.wordLength}
+                        placeholder={`Digite uma palavra com ${room.wordLength} letras`}
+                        className="w-full px-4 py-3 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        disabled={isLoading}
+                      />
+                      <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
+                        {word.length}/{room.wordLength}
+                      </p>
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={isLoading || word.length !== room.wordLength}
+                      className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-400 text-white font-semibold py-3 rounded-lg transition-colors disabled:cursor-not-allowed"
+                    >
+                      {isLoading ? "Enviando..." : "Enviar Palavra"}
+                    </button>
+                  </form>
+                </div>
+              )}
+
+              {hasSubmittedWord && (
+                <div className="card mb-6 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
+                  <h3 className="text-2xl font-semibold mb-2 text-green-800 dark:text-green-300">
+                    ✓ Palavra Enviada
+                  </h3>
+                  <p className="text-green-700 dark:text-green-400">
+                    Sua palavra foi registrada. Aguarde os demais participantes.
+                  </p>
+                </div>
+              )}
+
+              {/* Start Game Button (Host Only) */}
+              {isHost && (
+                <div className="card mb-6 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
+                  <h3 className="text-lg font-semibold mb-4 text-blue-800 dark:text-blue-300">
+                    Controles do Anfitrião
+                  </h3>
+
+                  {!allPlayersSubmitted && (
+                    <p className="text-sm text-blue-700 dark:text-blue-400 mb-4">
+                      Aguardando {room.participantCount - room.wordSubmittedBy.length} participante(s)
+                      para enviar palavras...
+                    </p>
+                  )}
+
+                  <button
+                    onClick={handleStartGame}
+                    disabled={
+                      isLoading ||
+                      !allPlayersSubmitted ||
+                      room.participantCount < 2
+                    }
+                    className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-400 text-white font-semibold py-3 rounded-lg transition-colors disabled:cursor-not-allowed"
+                  >
+                    {isLoading ? "Iniciando..." : "Iniciar Partida"}
+                  </button>
+
+                  {room.participantCount < 2 && (
+                    <p className="text-xs text-slate-600 dark:text-slate-400 mt-2">
+                      Mínimo de 2 participantes necessários
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Leave Room Button */}
+              <button
+                onClick={handleLeaveRoom}
+                disabled={isLoading}
+                className="w-full bg-slate-300 dark:bg-slate-600 hover:bg-slate-400 dark:hover:bg-slate-500 disabled:opacity-50 text-slate-900 dark:text-white font-semibold py-2 rounded-lg transition-colors disabled:cursor-not-allowed"
+              >
+                Sair da Sala
+              </button>
+            </>
+          ) : (
+            <div className="card">
+              <h3 className="text-2xl font-semibold mb-4">Partida em Progresso</h3>
+              <p className="text-slate-600 dark:text-slate-400">
+                Esta partida já começou. Você será redirecionado para o jogo.
+              </p>
+              <div className="mt-6">
+                <Link href={`/game/latest?roomId=${roomId}`} className="btn-primary">
+                  Ir para o Jogo
+                </Link>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
