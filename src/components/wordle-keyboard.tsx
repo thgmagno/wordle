@@ -77,13 +77,16 @@ export function WordleKeyboard({
   };
 
   return (
-    // Every key is flex-1 within its own row (share of that row's width)
-    // instead of a fixed/content-based size: 10 keys plus their gaps
-    // otherwise don't reliably fit a narrow phone's viewport and overflow
-    // horizontally. Submitting is handled entirely by the standalone
-    // "Enviar" button above this keyboard (and the physical Enter key,
-    // still bound below) — there's no on-screen Enter key here to keep the
-    // letter rows visually consistent with the rest of the row.
+    // Every key gets the SAME size — a clamp() between a floor and a
+    // ceiling, scaled by viewport width — regardless of which row it's
+    // in. Sizing keys with flex-1 (a share of their own row's width)
+    // looks right for the top row but makes the shorter rows' keys
+    // visibly *wider* than the top row's, since flex-1 divides each row's
+    // width by only that row's own key count (10 in the top row, 9 in the
+    // middle, 8 in the bottom with backspace) instead of a shared size.
+    // flex-none plus justify-center on each row reproduces the classic
+    // Wordle keyboard look instead: identical key size everywhere, and
+    // shorter rows just end up centered.
     <div className="flex flex-col gap-1.5 w-full max-w-2xl mx-auto px-1 sm:px-2">
       {KEYBOARD_ROWS.map((row, rowIndex) => (
         <div key={rowIndex} className="flex gap-1 sm:gap-1.5 justify-center">
@@ -92,7 +95,7 @@ export function WordleKeyboard({
               key={key}
               onClick={() => onKeyPress(key)}
               disabled={disabled}
-              className={`${getKeyClass(key)} flex-1 min-w-0 max-w-10 sm:max-w-12`}
+              className={`${getKeyClass(key)} flex-none w-[clamp(1.75rem,8.5vw,2.75rem)] h-11 sm:h-12 px-0 flex items-center justify-center`}
             >
               {key.toUpperCase()}
             </button>
@@ -103,7 +106,7 @@ export function WordleKeyboard({
               onClick={() => onKeyPress("backspace")}
               disabled={disabled}
               aria-label="Apagar letra"
-              className="keyboard-key flex-[1.5] min-w-0 max-w-16 sm:max-w-20 px-1"
+              className="keyboard-key flex-none w-[clamp(2.75rem,13vw,4rem)] h-11 sm:h-12 px-0 flex items-center justify-center"
             >
               ⌫
             </button>
