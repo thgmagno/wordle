@@ -167,21 +167,53 @@ export default function GameBoardClient({
   };
 
   if (gameState.isSpectator) {
+    const othersProgress: Array<{
+      user: { id: string; name: string | null; image: string | null };
+      attempts: Array<{ attemptText: string; result: AttemptResult[] }>;
+    }> = currentRound?.othersProgress ?? [];
+
     return (
-      <div className="card text-center">
-        <h2 className="text-2xl font-bold mb-4">👁️ Modo Espectador</h2>
-        <p className="text-slate-600 dark:text-slate-400 mb-6">
-          Você está em modo espectador nesta rodada. Sua palavra foi selecionada para ser a resposta!
-        </p>
-        {currentRound && (
-          <div className="bg-slate-100 dark:bg-slate-700 p-4 rounded-lg mb-6">
-            <p className="text-sm text-slate-600 dark:text-slate-400">Sua palavra:</p>
-            <p className="text-2xl font-bold">{currentRound.answerWord || "***"}</p>
-          </div>
-        )}
-        <p className="text-slate-600 dark:text-slate-400">
-          Acompanhe as tentativas dos outros jogadores abaixo.
-        </p>
+      <div className="space-y-6">
+        <div className="card text-center">
+          <h2 className="text-2xl font-bold mb-4">👁️ Modo Espectador</h2>
+          <p className="text-slate-600 dark:text-slate-400 mb-6">
+            Você está em modo espectador nesta rodada. Sua palavra foi selecionada para ser a resposta!
+          </p>
+          {currentRound && (
+            <div className="bg-slate-100 dark:bg-slate-700 p-4 rounded-lg mb-6">
+              <p className="text-sm text-slate-600 dark:text-slate-400">Sua palavra:</p>
+              <p className="text-2xl font-bold">{currentRound.answerWord || "***"}</p>
+            </div>
+          )}
+          <p className="text-slate-600 dark:text-slate-400">
+            Acompanhe as tentativas dos outros jogadores abaixo.
+          </p>
+        </div>
+
+        <div className="space-y-6">
+          {othersProgress.length === 0 && (
+            <p className="text-center text-sm text-slate-600 dark:text-slate-400">
+              Ninguém tentou ainda nesta rodada.
+            </p>
+          )}
+
+          {othersProgress.map((player) => (
+            <div key={player.user.id} className="card">
+              <div className="flex items-center gap-2 mb-4">
+                {player.user.image && (
+                  <img src={player.user.image} alt="" className="w-6 h-6 rounded-full" />
+                )}
+                <span className="font-semibold">{player.user.name || "Jogador"}</span>
+                <span className="text-xs text-slate-500 dark:text-slate-400">
+                  {player.attempts.length}/{maxAttempts} tentativas
+                </span>
+              </div>
+              <div className="flex justify-center">
+                <WordleGrid attempts={player.attempts} wordLength={wordLength} maxAttempts={maxAttempts} />
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     );
   }
