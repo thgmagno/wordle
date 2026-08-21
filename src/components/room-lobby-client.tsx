@@ -346,14 +346,6 @@ export default function RoomLobbyClient({
                 </div>
               )}
 
-              {/* Leave Room Button */}
-              <button
-                onClick={handleLeaveRoom}
-                disabled={isLoading}
-                className="w-full bg-slate-300 dark:bg-slate-600 hover:bg-slate-400 dark:hover:bg-slate-500 disabled:opacity-50 text-slate-900 dark:text-white font-semibold py-2 rounded-lg transition-colors disabled:cursor-not-allowed"
-              >
-                Sair da Sala
-              </button>
             </>
           ) : (
             <div className="card">
@@ -372,6 +364,23 @@ export default function RoomLobbyClient({
               )}
             </div>
           )}
+
+          {/* Leave Room Button — kept outside the LOBBY-only branch above
+              and always rendered regardless of room.status: a match stuck
+              IN_PROGRESS (e.g. a player disconnected mid-round and nothing
+              ever advances it — see LeaveRoomButton's own comment) used to
+              leave whoever landed on this screen with no way out at all,
+              since the branch above only shows a "waiting to be
+              redirected" message once the game has started. leaveRoom
+              itself already works no matter the room's status — this was
+              purely a missing UI affordance. */}
+          <button
+            onClick={handleLeaveRoom}
+            disabled={isLoading}
+            className="w-full mt-6 bg-slate-300 dark:bg-slate-600 hover:bg-slate-400 dark:hover:bg-slate-500 disabled:opacity-50 text-slate-900 dark:text-white font-semibold py-2 rounded-lg transition-colors disabled:cursor-not-allowed"
+          >
+            Sair da Sala
+          </button>
         </div>
       </div>
     </div>

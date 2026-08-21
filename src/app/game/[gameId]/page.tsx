@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import GameBoardClient from "@/components/game-board-client";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { LeaveRoomButton } from "@/components/leave-room-button";
 
 export default async function GamePage({
   params,
@@ -69,6 +70,21 @@ export default async function GamePage({
                   </p>
                 )}
               </div>
+              {/* Escape hatch for a match stuck ACTIVE forever (a player
+                  disconnected mid-round and nothing ever advances it — see
+                  LeaveRoomButton's own comment). Hidden once FINISHED: the
+                  end-of-match screen already has its own way back to the
+                  dashboard, and the room stops counting as "active" then
+                  anyway. */}
+              {gameState.status !== "FINISHED" && gameState.room?.code && (
+                <LeaveRoomButton
+                  roomCode={gameState.room.code}
+                  label="Sair"
+                  loadingLabel="..."
+                  confirmMessage="Deseja sair da partida? Você não poderá voltar a esta rodada."
+                  className="text-xs sm:text-sm font-semibold text-slate-600 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 px-2 py-1"
+                />
+              )}
               <ThemeToggle />
             </div>
           </div>
