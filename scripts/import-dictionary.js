@@ -27,8 +27,15 @@ const DICTIONARY_SOURCES = {
 };
 
 const ORIGIN = "fserb-pt-br";
+// The game itself only plays 4/5/6-letter rounds (see
+// src/lib/word-normalization.ts's isValidWordLength, which is what
+// actually gates room creation and answer/attempt validation) — that's
+// deliberately untouched. This range is just what the IMPORT stores: as
+// much of the source lexicon as exists, up to 10 letters, so longer words
+// are already sitting in the dictionary, ready for whenever a game mode
+// wants them, instead of being silently discarded at import time.
 const MIN_LENGTH = 4;
-const MAX_LENGTH = 6;
+const MAX_LENGTH = 10;
 const BATCH_SIZE = 1000;
 
 // Alfabeto pt-BR (a forma original mantém acentos; hífen/espaço/dígito são rejeitados)

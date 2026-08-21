@@ -95,7 +95,9 @@ npm run dictionary:import
 
 This script:
 - Downloads words from the fserb/pt-br repository
-- Filters for 4, 5, and 6-letter words only
+- Filters for 4-to-10-letter words (the game itself only plays 4/5/6-letter
+  rounds — see "Word Validation" below — but the dictionary also stores
+  longer words as they appear in the source, ready for a future game mode)
 - Normalizes Portuguese characters (accents, special characters)
 - Identifies blocked/negative words
 - Stores ~100k+ valid words in MongoDB
