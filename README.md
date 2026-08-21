@@ -95,11 +95,25 @@ npm run dictionary:import
 
 This script:
 - Downloads words from the fserb/pt-br repository
-- Filters for 4, 5, and 6-letter words only
+- Filters for 4-to-10-letter words (the game itself only plays 4/5/6-letter
+  rounds — see "Word Validation" below — but the dictionary also stores
+  longer words as they appear in the source, ready for a future game mode)
 - Normalizes Portuguese characters (accents, special characters)
 - Identifies blocked/negative words
 - Stores ~100k+ valid words in MongoDB
 - Is idempotent (safe to run multiple times)
+
+This is **not** wired into the Vercel build — the import re-downloads and
+re-diffs the whole upstream lexicon (~145k lines) against everything
+already stored on every single run, and a transient GitHub outage while
+fetching the source would fail the import itself, not something that
+should ever be able to block an unrelated code deploy. Instead,
+[`.github/workflows/dictionary-import.yml`](.github/workflows/dictionary-import.yml)
+runs it manually, on demand, from the Actions tab → "Dictionary Import" →
+Run workflow — no schedule, so it doesn't depend on any one machine being
+on for it to happen, but only actually runs when someone means it to. Set
+a `MONGODB_URI` repository secret pointing at the production database for
+it to have something to write to.
 
 ### Development Server
 
