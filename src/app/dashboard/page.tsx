@@ -21,23 +21,32 @@ export default async function DashboardPage() {
 
   return (
     <div className="min-h-screen flex flex-col">
-      {/* Header */}
+      {/* Header — stacks vertically below the "Wordle" logo on narrow
+          screens instead of forcing everything onto one row: a long name
+          plus the guest badge, theme toggle and "Sair" button together are
+          wider than a phone screen, and squeezing them into a single
+          `justify-between` row let the welcome text's wrapped second line
+          collide visually with the logo next to it. `min-w-0` + `truncate`
+          on the name keeps an extra-long name from doing the same thing
+          even in the stacked mobile layout. */}
       <header className="border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900">
-        <div className="container mx-auto px-4 py-4 flex justify-between items-center">
+        <div className="container mx-auto px-4 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <h1 className="text-2xl font-bold text-blue-600">Wordle</h1>
-          <div className="flex gap-4 items-center">
-            <span className="text-sm text-slate-600 dark:text-slate-400 flex items-center gap-2">
-              Bem-vindo, {session.user.name}!
+          <div className="flex flex-wrap gap-3 items-center justify-between sm:justify-end">
+            <span className="min-w-0 text-sm text-slate-600 dark:text-slate-400 flex items-center gap-2">
+              <span className="truncate">Bem-vindo, {session.user.name}!</span>
               {session.user.isGuest && (
-                <span className="text-xs font-semibold px-2 py-1 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
+                <span className="shrink-0 text-xs font-semibold px-2 py-1 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
                   Convidado
                 </span>
               )}
             </span>
-            <ThemeToggle />
-            <Link href="/api/auth/signout" className="btn-secondary">
-              Sair
-            </Link>
+            <div className="flex items-center gap-2 sm:gap-4 shrink-0">
+              <ThemeToggle />
+              <Link href="/api/auth/signout" className="btn-secondary">
+                Sair
+              </Link>
+            </div>
           </div>
         </div>
       </header>
