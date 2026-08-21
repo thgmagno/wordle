@@ -6,7 +6,7 @@ import { checkRateLimit, RATE_LIMIT_CONFIGS } from "@/lib/rate-limit";
 import { logger } from "@/lib/logger";
 import { revalidatePath } from "next/cache";
 import { createRound } from "@/server/game-actions";
-import { emitRoomUpdate, emitGameUpdate } from "@/lib/realtime";
+import { emitRoomUpdate, emitGameUpdate, emitPublicRoomsUpdate } from "@/lib/realtime";
 import { generateRoomCode, normalizeRoomCode } from "@/lib/room-code";
 import { MIN_WORD_LENGTH, MAX_WORD_LENGTH } from "@/lib/word-normalization";
 
@@ -324,6 +324,7 @@ export async function createRoom(
 
     logger.info("room", "Sala criada", { roomId: room.id, code: room.code, hostId, wordLength, isPublic: room.isPublic }, hostId);
     revalidatePath("/");
+    emitPublicRoomsUpdate();
     return { success: true, roomId: room.code };
   } catch (error) {
     logger.error("room", "Erro ao criar sala", error as Error, { hostId }, hostId);
@@ -435,6 +436,7 @@ export async function joinRoom(
     // same one, via RoomLobbyClient/useRoomRealtime) subscribes to its
     // socket channel by that same code, never the internal id.
     emitRoomUpdate(room.code);
+    emitPublicRoomsUpdate();
     return { success: true };
   } catch (error) {
     logger.error("room", "Erro ao entrar na sala", error as Error, { roomCode }, userId);
@@ -490,8 +492,43 @@ export async function leaveRoom(
       },
     });
 
-    // If host left, assign new host
-    if (room.hostId === userId) {
+    if (room.hostId === userId && room.status === "LOBBY") {
+      // The host leaving before the match starts closes the room outright
+      // instead of just reassigning a new host: at this stage "host" is
+      // really just "whoever happened to create the room," and quietly
+      // handing that off to someone else is more confusing than helpful.
+      // Previously this left an orphaned room behind whenever nobody
+      // remained to inherit it (or even when someone did — the new host
+      // never asked to run someone else's room) — still open, and if
+      // public, still listed in the dashboard's "Salas Públicas" browser
+      // (getPublicRooms) with the departed host's name on it and an
+      // "Entrar" link into a room they never actually joined. Every
+      // remaining participant is marked LEFT alongside the host, and the
+      // room flips straight to FINISHED, which every "open room" surface
+      // (getActiveRoomForUser, getPublicRooms, joinRoom) already treats
+      // as closed.
+      //
+      // Once a match is IN_PROGRESS, the host is just another participant
+      // mid-game — reassigning a new host (see the branch below) keeps
+      // the match itself resilient to the original host disconnecting,
+      // instead of ending it for everyone else still actively playing.
+      await prisma.roomParticipant.updateMany({
+        where: { roomId, status: "ACTIVE" },
+        data: { status: "LEFT", leftAt: new Date() },
+      });
+
+      await prisma.room.update({
+        where: { id: roomId },
+        data: { status: "FINISHED" },
+      });
+
+      logger.info(
+        "room",
+        "Sala encerrada porque o anfitrião saiu antes da partida começar",
+        { userId, roomId, code: room.code },
+        userId
+      );
+    } else if (room.hostId === userId) {
       const remainingParticipants = await prisma.roomParticipant.findFirst({
         where: {
           roomId,
@@ -512,6 +549,7 @@ export async function leaveRoom(
     logger.info("room", "Usuário saiu da sala", { userId, roomId, code: room.code }, userId);
     revalidatePath(`/room/${room.code}`);
     emitRoomUpdate(room.code);
+    emitPublicRoomsUpdate();
     return { success: true };
   } catch (error) {
     logger.error("room", "Erro ao sair da sala", error as Error, { userId, roomCode }, userId);
@@ -816,6 +854,7 @@ async function startGameInternal(
     logger.info("game", "Jogo iniciado", { roomId, gameId: game.id, participantCount, totalRounds: participantCount }, actorUserId);
     revalidatePath(`/room/${room.code}`);
     emitRoomUpdate(room.code);
+    emitPublicRoomsUpdate();
     return { success: true, gameId: game.id };
   } catch (error) {
     logger.error("game", "Erro ao iniciar jogo", error as Error, { roomId }, actorUserId);
@@ -1047,6 +1086,7 @@ export async function changeRoomVisibility(
     );
     revalidatePath(`/room/${roomCode}`);
     emitRoomUpdate(roomCode);
+    emitPublicRoomsUpdate();
 
     return { success: true };
   } catch (error) {
@@ -1111,19 +1151,31 @@ export async function getPublicRooms(limit: number = 50): Promise<
       },
       include: {
         host: { select: { id: true, name: true, image: true } },
-        participants: { where: { status: "ACTIVE" }, select: { id: true } },
+        participants: { where: { status: "ACTIVE" }, select: { id: true, userId: true } },
       },
       orderBy: { createdAt: "desc" },
       take: clampedLimit,
     });
 
-    return rooms.map((room: any) => ({
-      code: room.code,
-      wordLength: room.wordLength,
-      participantCount: room.participants.length,
-      maxPlayers: room.maxPlayers,
-      host: room.host,
-    }));
+    // Defense in depth, not just belt-and-suspenders for leaveRoom's own
+    // host-leave handling above: Prisma can't express "hostId must match
+    // one of this room's own participants" as a query filter (it needs a
+    // literal to compare against, not another field on the same
+    // document), so this can only be checked after the fetch. Guards
+    // against exactly the bug this whole feature shipped with — a room
+    // whose host is gone still showing up here with their name on it and
+    // a working "Entrar" link — for any room already in that state before
+    // this fix deployed, or reaching it through some path other than
+    // leaveRoom.
+    return rooms
+      .filter((room: any) => room.participants.some((p: any) => p.userId === room.hostId))
+      .map((room: any) => ({
+        code: room.code,
+        wordLength: room.wordLength,
+        participantCount: room.participants.length,
+        maxPlayers: room.maxPlayers,
+        host: room.host,
+      }));
   } catch (error) {
     logger.error("room", "Erro ao listar salas públicas", error as Error, { userId }, userId);
     return [];
@@ -1214,6 +1266,7 @@ export async function playAgain(
     logger.info("room", "Sala reiniciada para nova partida", { roomId: room.id, previousGameId: room.currentGameId }, userId);
     revalidatePath(`/room/${roomCode}`);
     emitRoomUpdate(roomCode);
+    emitPublicRoomsUpdate();
     // Players still looking at the just-finished match's Game Over screen
     // are subscribed to that game's own channel (see useGameRealtime), not
     // the room's — without this, only the host (who navigates away

@@ -125,6 +125,43 @@ export function useRoomRealtime(
   }, [roomId, router, suppressRefreshRef]);
 }
 
+// Matches the fixed channel name in src/lib/realtime.ts — see that file's
+// comment for why this one isn't parameterized like room-*/game-* above.
+const PUBLIC_ROOMS_CHANNEL = "public-rooms";
+
+/**
+ * Subscribes to realtime updates for the dashboard's "Salas Públicas"
+ * browser. Any "public-rooms:update" event (emitted whenever a room is
+ * created, its visibility is toggled, someone joins/leaves, a match
+ * starts, or a finished room reopens via "Jogar Novamente" — see
+ * emitPublicRoomsUpdate's callers) triggers a Server Component refresh,
+ * so a newly public room appears — or a closed/started one disappears —
+ * without the user having to reload the page.
+ */
+export function usePublicRoomsRealtime(): void {
+  const router = useRouter();
+
+  useEffect(() => {
+    const client = getPusherClient();
+    if (!client) {
+      return;
+    }
+
+    const channel = client.subscribe(PUBLIC_ROOMS_CHANNEL);
+
+    const handleUpdate = () => router.refresh();
+    channel.bind("public-rooms:update", handleUpdate);
+
+    const unbindForegroundRefresh = bindForegroundRefresh(client, router);
+
+    return () => {
+      channel.unbind("public-rooms:update", handleUpdate);
+      client.unsubscribe(PUBLIC_ROOMS_CHANNEL);
+      unbindForegroundRefresh();
+    };
+  }, [router]);
+}
+
 /**
  * Subscribes to realtime updates for a game (players and the round's
  * spectator). Any "game:update" event (new attempt, round finished, next
