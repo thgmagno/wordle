@@ -159,6 +159,10 @@ model RoomParticipant {
   @@unique([roomId, userId])
   @@index([roomId])
   @@index([userId])
+  // Backs "does this user already have an active room?" (createRoom,
+  // joinRoom, getActiveRoomForUser) — a per-user scan filtered by status,
+  // instead of by roomId.
+  @@index([userId, status])
 }
 
 enum ParticipantStatus {
