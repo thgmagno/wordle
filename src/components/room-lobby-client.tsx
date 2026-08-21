@@ -2,7 +2,10 @@
 
 import { useState, useEffect, useRef } from "react";
 import { submitWord, startGame, leaveRoom } from "@/server/room-actions";
-import { validateAnswerWordAction } from "@/server/word-actions";
+import {
+  validateAnswerWordAction,
+  getRandomWordSuggestionAction,
+} from "@/server/word-actions";
 import { useRoomRealtime } from "@/lib/use-realtime";
 import { RoomCodeShare } from "@/components/room-code-share";
 import Link from "next/link";
@@ -48,10 +51,37 @@ export default function RoomLobbyClient({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isShuffling, setIsShuffling] = useState(false);
   const [hasSubmittedWord, setHasSubmittedWord] = useState(
     room.wordSubmittedBy.includes(currentUserId)
   );
   const isHost = room.hostId === currentUserId;
+
+  // "Sortear" button: fills the field with a random dictionary word so the
+  // player can keep re-rolling until one feels right, instead of having to
+  // think of a word from scratch. Purely a client-side convenience — the
+  // suggestion still goes through the exact same validate-then-submit path
+  // as anything typed by hand, so this has no special trust attached to it.
+  const handleShuffleWord = async () => {
+    setError(null);
+    setSuccess(null);
+    setIsShuffling(true);
+
+    try {
+      const result = await getRandomWordSuggestionAction(room.wordLength);
+
+      if (result.success && result.word) {
+        setWord(result.word);
+      } else {
+        setError(result.error || "Erro ao sortear palavra");
+      }
+    } catch (err) {
+      setError("Erro ao sortear palavra");
+      console.error(err);
+    } finally {
+      setIsShuffling(false);
+    }
+  };
 
   const handleSubmitWord = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -227,7 +257,17 @@ export default function RoomLobbyClient({
 
                   <form onSubmit={handleSubmitWord} className="space-y-4">
                     <div>
-                      <label className="block text-sm font-semibold mb-2">Palavra</label>
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="block text-sm font-semibold">Palavra</label>
+                        <button
+                          type="button"
+                          onClick={handleShuffleWord}
+                          disabled={isLoading || isShuffling}
+                          className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {isShuffling ? "Sorteando..." : "🎲 Sortear palavra"}
+                        </button>
+                      </div>
                       <input
                         type="text"
                         value={word}
