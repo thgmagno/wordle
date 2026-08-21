@@ -10,7 +10,7 @@ import Link from "next/link";
 export default function CreateRoomPage() {
   const router = useRouter();
   const [wordLength, setWordLength] = useState(5);
-  const [isPublic, setIsPublic] = useState(false);
+  const [isPublic, setIsPublic] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Set only for the "already in another room" rejection — offers a
