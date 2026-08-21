@@ -6,38 +6,41 @@ import { checkRateLimit, RATE_LIMIT_CONFIGS } from "@/lib/rate-limit";
 import { logger } from "@/lib/logger";
 import { revalidatePath } from "next/cache";
 import { createRound } from "@/server/game-actions";
-import { emitRoomUpdate } from "@/lib/realtime";
+import { emitRoomUpdate, emitGameUpdate } from "@/lib/realtime";
 import { generateRoomCode, normalizeRoomCode } from "@/lib/room-code";
 import { MIN_WORD_LENGTH, MAX_WORD_LENGTH } from "@/lib/word-normalization";
 
 /**
  * Find the room (if any) a user currently has an ACTIVE participation in,
  * restricted to rooms that haven't finished (LOBBY or IN_PROGRESS) — a
- * FINISHED room has nothing to go back to, so it doesn't count as "still
- * in a room" either for the dashboard's "Sala Atual" card or the
+ * FINISHED room has nothing to go back to (unless the host uses "Jogar
+ * Novamente" — see playAgain — which resets it back to LOBBY, at which
+ * point it counts again like any other open room), so it doesn't count as
+ * "still in a room" either for the dashboard's "Sala Atual" card or the
  * one-room-at-a-time guard below. Shared by createRoom, joinRoom, and
  * getActiveRoomForUser so all three agree on exactly what "already in a
  * room" means.
  *
- * Also excludes a room whose Game already finished, even if Room.status
- * itself somehow still reads IN_PROGRESS: advanceGameInternal (in
- * game-actions.ts) flips Game.status and Room.status in two separate
+ * Also excludes a room whose *current* game already finished, even if
+ * Room.status itself somehow still reads IN_PROGRESS: advanceGameInternal
+ * (in game-actions.ts) flips Game.status and Room.status in two separate
  * writes, not one transaction, so a failure between them — or a request
  * that got interrupted — can leave the room stuck showing "in progress"
  * forever, with no way for anyone to create or join a new room. Checking
- * the linked Game directly here means a room already in that stuck state
- * unblocks itself immediately, with no manual data fix needed.
+ * the room's currentGameId directly here means a room already in that
+ * stuck state unblocks itself immediately, with no manual data fix
+ * needed. This has to go by currentGameId specifically, not "does this
+ * room have any finished game in its history" — a room that has played
+ * (and correctly finished) several matches via "Jogar Novamente" would
+ * otherwise look permanently stuck the instant its very first match ended.
  */
 async function findActiveRoomParticipation(userId: string, excludeRoomId?: string) {
-  return prisma.roomParticipant.findFirst({
+  const participation = await prisma.roomParticipant.findFirst({
     where: {
       userId,
       status: "ACTIVE",
       roomId: excludeRoomId ? { not: excludeRoomId } : undefined,
-      room: {
-        status: { in: ["LOBBY", "IN_PROGRESS"] },
-        game: { isNot: { status: "FINISHED" } },
-      },
+      room: { status: { in: ["LOBBY", "IN_PROGRESS"] } },
     },
     include: {
       room: {
@@ -45,6 +48,22 @@ async function findActiveRoomParticipation(userId: string, excludeRoomId?: strin
       },
     },
   });
+
+  if (!participation) {
+    return null;
+  }
+
+  if (participation.room.currentGameId) {
+    const currentGame = await prisma.game.findUnique({
+      where: { id: participation.room.currentGameId },
+      select: { status: true },
+    });
+    if (currentGame?.status === "FINISHED") {
+      return null;
+    }
+  }
+
+  return participation;
 }
 
 /**
@@ -407,9 +426,6 @@ export async function getRoomInfo(roomCode: string) {
         submittedWords: {
           select: { userId: true },
         },
-        game: {
-          select: { id: true },
-        },
       },
     });
 
@@ -421,7 +437,7 @@ export async function getRoomInfo(roomCode: string) {
       ...room,
       participantCount: room.participants.length,
       wordSubmittedBy: room.submittedWords.map((w: any) => w.userId),
-      gameId: room.game?.id ?? null,
+      gameId: room.currentGameId ?? null,
     };
   } catch (error) {
     console.error("Error getting room info:", error);
@@ -500,10 +516,11 @@ export async function submitWord(
     // real reason to make everyone wait on the host to click "Iniciar
     // Partida" — see startGameInternal. Two players submitting their final
     // word at nearly the same time can both observe "everyone's in" and
-    // both attempt this; that's harmless because Game.roomId is @unique,
-    // so at most one of the concurrent prisma.game.create calls actually
-    // succeeds and the other fails cleanly (logged, not surfaced to this
-    // player — their own word submission still succeeded).
+    // both attempt this; that's harmless because startGameInternal claims
+    // the room's LOBBY->IN_PROGRESS transition atomically, so at most one
+    // of the concurrent calls actually creates a game and the other fails
+    // cleanly (logged, not surfaced to this player — their own word
+    // submission still succeeded).
     const activeParticipantCount = await prisma.roomParticipant.count({
       where: { roomId, status: "ACTIVE" },
     });
@@ -573,6 +590,25 @@ async function startGameInternal(
       return { success: false, error: "Pelo menos 2 participantes são necessários" };
     }
 
+    // Atomic guard: only the caller that actually flips Room.status from
+    // LOBBY to IN_PROGRESS proceeds to create the game. Two players
+    // submitting their final word at nearly the same instant can both pass
+    // every check above and both call this function (see submitWord's
+    // auto-start) — without this, both would create a Game for the room.
+    // Game.roomId isn't unique (a room can play more than one match across
+    // its lifetime via "Jogar Novamente" — see playAgain), so that no
+    // longer doubles as a race guard the way it once did; the room's own
+    // status is the guard instead, the same pattern advanceGameInternal
+    // already uses for the symmetric race at the *end* of a match.
+    const claim = await prisma.room.updateMany({
+      where: { id: roomId, status: "LOBBY" },
+      data: { status: "IN_PROGRESS", gameStartedAt: new Date() },
+    });
+
+    if (claim.count === 0) {
+      return { success: false, error: "O jogo já foi iniciado" };
+    }
+
     // Create game
     const game = await prisma.game.create({
       data: {
@@ -589,9 +625,14 @@ async function startGameInternal(
     const firstRound = await createRound(game.id, roomId, 1);
 
     if (!firstRound.success) {
-      // Roll back the game we just created so the room doesn't end up
-      // IN_PROGRESS with a game that has no rounds.
+      // Roll back both the game we just created AND the room status claim
+      // above, so a failure here doesn't leave the room stuck IN_PROGRESS
+      // with no playable game and no way for the host to retry.
       await prisma.game.delete({ where: { id: game.id } });
+      await prisma.room.update({
+        where: { id: roomId },
+        data: { status: "LOBBY", gameStartedAt: null },
+      });
       logger.error(
         "game",
         "Falha ao criar a primeira rodada",
@@ -602,13 +643,10 @@ async function startGameInternal(
       return { success: false, error: firstRound.error || "Falha ao criar a primeira rodada" };
     }
 
-    // Update room status
+    // Point the room at this match as its current one.
     await prisma.room.update({
       where: { id: roomId },
-      data: {
-        status: "IN_PROGRESS",
-        gameStartedAt: new Date(),
-      },
+      data: { currentGameId: game.id },
     });
 
     logger.info("game", "Jogo iniciado", { roomId, gameId: game.id, participantCount, totalRounds: participantCount }, actorUserId);
@@ -658,5 +696,106 @@ export async function startGame(
   } catch (error) {
     logger.error("game", "Erro ao iniciar jogo", error as Error, { roomCode }, userId);
     return { success: false, error: "Falha ao iniciar o jogo" };
+  }
+}
+
+/**
+ * Reset a room back to LOBBY after its match has finished, so the same
+ * group can play another round without creating a new room and
+ * re-sharing the code. Only the host may trigger this — same as
+ * startGame — and only once the room's current match has genuinely
+ * finished; there's nothing to "play again" from mid-match.
+ *
+ * The room keeps its code, its host, and its participant roster exactly
+ * as they were (whoever is still ACTIVE stays ACTIVE — this is the whole
+ * point, nobody has to rejoin). What resets is everything specific to the
+ * match that just ended: every previously submitted secret word is
+ * deleted (they were already used/exposed as round answers, and reusing
+ * a stale one would be predictable for anyone who played before), and the
+ * room is pointed at no current game. The finished Game/Round/MatchScore
+ * records themselves are left alone — they're history, not state to roll
+ * back, and finalizeGameStatistics already folded that match's result
+ * into everyone's UserStatistics.
+ */
+export async function playAgain(
+  roomCode: string
+): Promise<{ success: boolean; error?: string }> {
+  const session = await auth();
+  const userId = session?.user?.id;
+
+  if (!userId) {
+    return { success: false, error: "Você precisa estar autenticado" };
+  }
+
+  try {
+    const room = await prisma.room.findUnique({
+      where: { code: normalizeRoomCode(roomCode) },
+      select: { id: true, hostId: true, status: true, currentGameId: true },
+    });
+
+    if (!room) {
+      return { success: false, error: "Sala não encontrada" };
+    }
+
+    if (room.hostId !== userId) {
+      logger.warn("security", "Non-host attempted to restart room", { userId, roomId: room.id }, userId);
+      return { success: false, error: "Apenas o anfitrião pode reiniciar a sala" };
+    }
+
+    if (room.status !== "FINISHED") {
+      return { success: false, error: "A partida ainda não terminou" };
+    }
+
+    const rateLimit = await checkRateLimit(
+      `play-again-${userId}`,
+      RATE_LIMIT_CONFIGS.PLAY_AGAIN
+    );
+
+    if (!rateLimit.allowed) {
+      logger.warn("room", "Play-again rate limit exceeded", { userId, roomId: room.id }, userId);
+      return { success: false, error: rateLimit.message || "Limite de reinícios atingido" };
+    }
+
+    // Every previously submitted word belonged to the match that just
+    // ended — clear them so each participant submits a fresh one for the
+    // new match. Idempotent: a concurrent duplicate call (see the atomic
+    // claim below) would just delete the same already-deleted rows again.
+    await prisma.submittedWord.deleteMany({ where: { roomId: room.id } });
+
+    // Atomic guard, same pattern as startGameInternal's LOBBY->IN_PROGRESS
+    // claim: only the caller that actually flips Room.status from
+    // FINISHED to LOBBY proceeds to broadcast the reset. Guards against a
+    // double-click or two tabs both submitting this at once.
+    const claim = await prisma.room.updateMany({
+      where: { id: room.id, status: "FINISHED" },
+      data: {
+        status: "LOBBY",
+        gameStartedAt: null,
+        gameEndedAt: null,
+        currentGameId: null,
+      },
+    });
+
+    if (claim.count === 0) {
+      return { success: false, error: "A sala não está disponível para reiniciar" };
+    }
+
+    logger.info("room", "Sala reiniciada para nova partida", { roomId: room.id, previousGameId: room.currentGameId }, userId);
+    revalidatePath(`/room/${roomCode}`);
+    emitRoomUpdate(roomCode);
+    // Players still looking at the just-finished match's Game Over screen
+    // are subscribed to that game's own channel (see useGameRealtime), not
+    // the room's — without this, only the host (who navigates away
+    // explicitly right after this action resolves) would ever learn the
+    // room reopened; everyone else would be stuck looking at a stale
+    // scoreboard until they manually went back to the dashboard.
+    if (room.currentGameId) {
+      emitGameUpdate(room.currentGameId);
+    }
+
+    return { success: true };
+  } catch (error) {
+    logger.error("room", "Erro ao reiniciar sala", error as Error, { roomCode }, userId);
+    return { success: false, error: "Falha ao reiniciar a sala" };
   }
 }
