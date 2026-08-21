@@ -13,8 +13,10 @@ import { signOut } from "next-auth/react";
  */
 export default function ProfileClient({
   initialShowInLeaderboard,
+  isGuest = false,
 }: {
   initialShowInLeaderboard: boolean;
+  isGuest?: boolean;
 }) {
   const [showInLeaderboard, setShowInLeaderboard] = useState(initialShowInLeaderboard);
   const [isLoading, setIsLoading] = useState(false);
@@ -47,36 +49,50 @@ export default function ProfileClient({
 
   return (
     <div className="space-y-4">
-      {/* Leaderboard Visibility */}
-      <div className="border border-slate-200 dark:border-slate-700 rounded-lg p-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="font-semibold mb-1">Mostrar no Ranking</h3>
-            <p className="text-xs text-slate-600 dark:text-slate-400">
-              {showInLeaderboard
-                ? "Seu perfil está visível no ranking global"
-                : "Seu perfil está oculto no ranking"}
-            </p>
-          </div>
-          <button
-            onClick={handleToggleLeaderboard}
-            disabled={isLoading}
-            className={`px-4 py-2 rounded-lg font-semibold transition-colors ${
-              showInLeaderboard
-                ? "bg-blue-600 hover:bg-blue-700 text-white"
-                : "bg-slate-200 dark:bg-slate-700 text-slate-900 dark:text-white"
-            } disabled:opacity-50`}
-          >
-            {showInLeaderboard ? "Visível" : "Oculto"}
-          </button>
-        </div>
-
-        {isSaved && (
-          <p className="text-xs text-green-600 dark:text-green-400 mt-2">
-            ✓ Preferência salva
+      {/* Leaderboard Visibility — a guest never has this toggle: their
+          account never participates in the ranking (see the isGuest
+          field's comment on the Prisma schema and
+          updateLeaderboardVisibility's server-side guard), so offering a
+          control that can't actually do anything would just be
+          confusing. */}
+      {isGuest ? (
+        <div className="border border-slate-200 dark:border-slate-700 rounded-lg p-4">
+          <h3 className="font-semibold mb-1">Mostrar no Ranking</h3>
+          <p className="text-xs text-slate-600 dark:text-slate-400">
+            Contas de convidado não participam do ranking global.
           </p>
-        )}
-      </div>
+        </div>
+      ) : (
+        <div className="border border-slate-200 dark:border-slate-700 rounded-lg p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="font-semibold mb-1">Mostrar no Ranking</h3>
+              <p className="text-xs text-slate-600 dark:text-slate-400">
+                {showInLeaderboard
+                  ? "Seu perfil está visível no ranking global"
+                  : "Seu perfil está oculto no ranking"}
+              </p>
+            </div>
+            <button
+              onClick={handleToggleLeaderboard}
+              disabled={isLoading}
+              className={`px-4 py-2 rounded-lg font-semibold transition-colors ${
+                showInLeaderboard
+                  ? "bg-blue-600 hover:bg-blue-700 text-white"
+                  : "bg-slate-200 dark:bg-slate-700 text-slate-900 dark:text-white"
+              } disabled:opacity-50`}
+            >
+              {showInLeaderboard ? "Visível" : "Oculto"}
+            </button>
+          </div>
+
+          {isSaved && (
+            <p className="text-xs text-green-600 dark:text-green-400 mt-2">
+              ✓ Preferência salva
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Logout */}
       <button

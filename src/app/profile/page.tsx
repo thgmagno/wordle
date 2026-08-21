@@ -49,10 +49,19 @@ export default async function ProfilePage() {
                 />
               )}
               <div>
-                <h1 className="text-3xl font-bold mb-2">{session.user.name}</h1>
-                <p className="text-slate-600 dark:text-slate-400 mb-2">
-                  {session.user.email}
-                </p>
+                <div className="flex items-center gap-2 mb-2">
+                  <h1 className="text-3xl font-bold">{session.user.name}</h1>
+                  {session.user.isGuest && (
+                    <span className="text-xs font-semibold px-2 py-1 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
+                      Convidado
+                    </span>
+                  )}
+                </div>
+                {session.user.email && (
+                  <p className="text-slate-600 dark:text-slate-400 mb-2">
+                    {session.user.email}
+                  </p>
+                )}
                 {rankPosition && (
                   <p className="text-lg font-semibold text-blue-600 dark:text-blue-400">
                     Posição no Ranking: #{rankPosition}
@@ -146,7 +155,10 @@ export default async function ProfilePage() {
               <div className="card">
                 <h2 className="text-2xl font-bold mb-6">Configurações</h2>
 
-                <ProfileClient initialShowInLeaderboard={showInLeaderboard} />
+                <ProfileClient
+                  initialShowInLeaderboard={showInLeaderboard}
+                  isGuest={session.user.isGuest}
+                />
               </div>
             </div>
           </div>

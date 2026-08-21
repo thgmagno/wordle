@@ -2,12 +2,18 @@
 
 import { signIn } from "next-auth/react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { ThemeToggle } from "@/components/theme-toggle";
 
 export default function SignInPage() {
+  const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const [guestName, setGuestName] = useState("");
+  const [isGuestLoading, setIsGuestLoading] = useState(false);
+  const [guestError, setGuestError] = useState<string | null>(null);
 
   const handleGoogleSignIn = async () => {
     setIsLoading(true);
@@ -17,6 +23,39 @@ export default function SignInPage() {
     } catch (err) {
       setError("Erro ao fazer login com Google. Tente novamente.");
       setIsLoading(false);
+    }
+  };
+
+  const handleGuestSignIn = async () => {
+    if (!guestName.trim()) {
+      setGuestError("Informe um nome");
+      return;
+    }
+
+    setIsGuestLoading(true);
+    setGuestError(null);
+
+    try {
+      // redirect: false so an invalid name / rate limit shows inline here
+      // instead of bouncing through a generic ?error=CredentialsSignin
+      // redirect — the "guest" provider id is the one registered in
+      // src/lib/auth.ts.
+      const result = await signIn("guest", {
+        name: guestName,
+        redirect: false,
+      });
+
+      if (result?.error) {
+        setGuestError("Não foi possível entrar. Verifique o nome e tente novamente.");
+        setIsGuestLoading(false);
+        return;
+      }
+
+      router.push("/dashboard");
+      router.refresh();
+    } catch (err) {
+      setGuestError("Erro ao entrar sem conta. Tente novamente.");
+      setIsGuestLoading(false);
     }
   };
 
@@ -71,6 +110,58 @@ export default function SignInPage() {
                 Você será criado automaticamente ao fazer login
               </span>
             </p>
+
+            {/* Divider */}
+            <div className="flex items-center gap-3 my-8">
+              <div className="flex-1 h-px bg-slate-200 dark:bg-slate-700" />
+              <span className="text-xs text-slate-500 dark:text-slate-400">ou</span>
+              <div className="flex-1 h-px bg-slate-200 dark:bg-slate-700" />
+            </div>
+
+            {/* Guest sign-in: for whoever can't (or doesn't want to) use a
+                Google account — a child whose account is under Family
+                Link and can't complete Google sign-in themselves is
+                exactly the case this exists for. Only a name is
+                collected; the account created is name-only and never
+                appears in the global ranking (see src/lib/auth.ts). */}
+            <div>
+              <h2 className="font-semibold mb-1">Entrar sem conta</h2>
+              <p className="text-xs text-slate-600 dark:text-slate-400 mb-3">
+                Informe apenas um nome para jogar. Você não vai aparecer no
+                ranking global.
+              </p>
+
+              {guestError && (
+                <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-800 dark:text-red-300 px-4 py-3 rounded-lg mb-3 text-sm">
+                  {guestError}
+                </div>
+              )}
+
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  handleGuestSignIn();
+                }}
+                className="flex gap-2"
+              >
+                <input
+                  type="text"
+                  value={guestName}
+                  onChange={(e) => setGuestName(e.target.value.slice(0, 30))}
+                  placeholder="Seu nome"
+                  disabled={isGuestLoading}
+                  maxLength={30}
+                  className="input-base flex-1"
+                />
+                <button
+                  type="submit"
+                  disabled={isGuestLoading || !guestName.trim()}
+                  className="btn-secondary shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isGuestLoading ? "Entrando..." : "Entrar"}
+                </button>
+              </form>
+            </div>
           </div>
 
           {/* Features */}
