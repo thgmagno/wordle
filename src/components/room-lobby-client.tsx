@@ -458,7 +458,7 @@ export default function RoomLobbyClient({
                     <div className="flex items-center justify-between gap-4">
                       <div className="min-w-0">
                         <p className="text-sm font-semibold text-blue-800 dark:text-blue-300 mb-1">
-                          Sala Pública
+                          Visibilidade da Sala
                         </p>
                         <p className="text-xs text-blue-700 dark:text-blue-400">
                           {room.isPublic
