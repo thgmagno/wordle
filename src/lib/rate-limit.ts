@@ -171,6 +171,16 @@ export const RATE_LIMIT_CONFIGS = {
     message: "Aguarde antes de enviar outra dica.",
   } as RateLimitConfig,
 
+  // Sortear uma palavra aleatória do dicionário para preencher o campo de
+  // palavra secreta. Generoso de propósito — o objetivo é deixar o jogador
+  // clicar várias vezes seguidas até gostar de uma sugestão, então o limite
+  // aqui existe só para conter abuso automatizado, não o uso normal.
+  RANDOM_WORD_SUGGESTION: {
+    windowMs: 60 * 1000, // 1 minuto
+    maxRequests: 30,
+    message: "Muitos sorteios de palavra. Aguarde um pouco.",
+  } as RateLimitConfig,
+
   // Login como convidado ("Entrar sem conta") — cada login cria uma nova
   // linha de usuário (não há credencial para reautenticar na mesma
   // identidade), então isso também limita o quanto essa rota pode ser
