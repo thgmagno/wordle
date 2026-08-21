@@ -10,34 +10,69 @@ import { emitRoomUpdate, emitGameUpdate } from "@/lib/realtime";
 import { generateRoomCode, normalizeRoomCode } from "@/lib/room-code";
 import { MIN_WORD_LENGTH, MAX_WORD_LENGTH } from "@/lib/word-normalization";
 
+// How long a room can sit showing IN_PROGRESS with no currentGameId
+// before it's treated as genuinely stuck rather than just a legitimate
+// startGameInternal call still in flight. See repairStuckInProgressRoom's
+// own comment for why this needs to exist at all — normal game/round
+// setup completes in well under a second even under load, so this is a
+// wide safety margin, not a tight one.
+const STUCK_IN_PROGRESS_THRESHOLD_MS = 15_000;
+
 /**
  * Self-heal a room stuck showing IN_PROGRESS with no currentGameId set.
- * The only way this combination is supposed to exist is for a handful of
+ *
+ * That combination is *supposed* to exist only for the handful of
  * milliseconds mid-flight inside startGameInternal, between the moment it
  * atomically claims the room (LOBBY -> IN_PROGRESS) and the moment it
- * finishes creating the match and points currentGameId at it — no caller
- * outside that function should ever actually observe it. But if anything
- * in between throws (game/round creation failing, a transient Mongo
- * blip), the room is left permanently stuck in exactly this state unless
- * something rolls the claim back — startGameInternal now does that for
- * every failure it can catch, but a room that got stuck here *before*
- * that fix still needs a way out too. There's nothing to salvage from
- * this state (no Game was ever fully set up), so the fix is simply to
- * revert the claim: back to LOBBY, ready for the host's "Iniciar Partida
- * Agora" fallback (or another word submission) to retry cleanly, instead
- * of a room that's stuck forever with no way out short of abandoning it.
+ * finishes creating the match and points currentGameId at it. This
+ * function used to assume no other caller could ever actually observe
+ * that window — wrong, and it broke production: a concurrent request
+ * (another player's own submitWord revalidating their view, a page load
+ * landing at just the right moment) genuinely can read the room during
+ * that gap, and this function "repairing" it back to LOBBY right then —
+ * a few milliseconds before startGameInternal's own currentGameId update
+ * landed — left the room stuck showing LOBBY with a real, playable Game
+ * that nobody could reach (the lobby only redirects into /game/[id] once
+ * status reads IN_PROGRESS again). Gating on how long `gameStartedAt` has
+ * stood is what actually distinguishes "legitimately still starting" from
+ * "genuinely abandoned" — reading the two field values together, without
+ * some such guard, cannot tell them apart at all.
+ *
+ * Once a room really is stuck this way, there's nothing to salvage (no
+ * Game was ever fully set up) — the fix is to revert the claim: back to
+ * LOBBY, ready for the host's "Iniciar Partida Agora" fallback (or
+ * another word submission) to retry cleanly, instead of a room that's
+ * stuck forever with no way out short of abandoning it.
  */
 async function repairStuckInProgressRoom<
-  T extends { id: string; status: string; currentGameId: string | null },
+  T extends {
+    id: string;
+    status: string;
+    currentGameId: string | null;
+    gameStartedAt: Date | null;
+  },
 >(room: T): Promise<T> {
   if (room.status !== "IN_PROGRESS" || room.currentGameId) {
     return room;
   }
 
-  await prisma.room.update({
-    where: { id: room.id },
+  const startedAt = room.gameStartedAt?.getTime() ?? 0;
+  if (Date.now() - startedAt < STUCK_IN_PROGRESS_THRESHOLD_MS) {
+    return room;
+  }
+
+  // Atomic + re-checks currentGameId is still null at write time (not
+  // just at the read above) — a concurrent startGameInternal call could
+  // have finished setting it in between, and this must not clobber that.
+  const repaired = await prisma.room.updateMany({
+    where: { id: room.id, status: "IN_PROGRESS", currentGameId: null },
     data: { status: "LOBBY", gameStartedAt: null },
   });
+
+  if (repaired.count === 0) {
+    return room;
+  }
+
   logger.warn(
     "room",
     "Sala presa em IN_PROGRESS sem partida associada — revertida para LOBBY",
@@ -45,6 +80,57 @@ async function repairStuckInProgressRoom<
   );
 
   return { ...room, status: "LOBBY" };
+}
+
+/**
+ * Self-heal the mirror-image corruption: a room stuck showing LOBBY while
+ * currentGameId already points at a real Game. This is what
+ * repairStuckInProgressRoom's own race actually produces in practice — it
+ * resets status back to LOBBY a few milliseconds before
+ * startGameInternal's own currentGameId write lands, so the room ends up
+ * with a real, playable Game that its own status insists doesn't exist
+ * (the lobby only redirects into /game/[id] once status reads
+ * IN_PROGRESS, so nobody could reach it). Reconciles Room.status to match
+ * the game it's actually pointing at instead — IN_PROGRESS while that
+ * game is still ACTIVE, FINISHED once the game is — never back to LOBBY,
+ * since a real Game already exists and letting anyone submit a fresh word
+ * for "a new match" while one is already running would corrupt things
+ * further, not fix them.
+ */
+async function repairLobbyRoomWithExistingGame<
+  T extends { id: string; status: string; currentGameId: string | null },
+>(room: T): Promise<T> {
+  if (room.status !== "LOBBY" || !room.currentGameId) {
+    return room;
+  }
+
+  const game = await prisma.game.findUnique({
+    where: { id: room.currentGameId },
+    select: { status: true },
+  });
+
+  if (!game) {
+    return room;
+  }
+
+  const correctStatus = game.status === "FINISHED" ? "FINISHED" : "IN_PROGRESS";
+
+  const repaired = await prisma.room.updateMany({
+    where: { id: room.id, status: "LOBBY", currentGameId: room.currentGameId },
+    data: { status: correctStatus },
+  });
+
+  if (repaired.count === 0) {
+    return room;
+  }
+
+  logger.warn(
+    "room",
+    "Sala presa em LOBBY com partida já existente — status corrigido",
+    { roomId: room.id, gameId: room.currentGameId, correctStatus },
+  );
+
+  return { ...room, status: correctStatus };
 }
 
 /**
@@ -91,6 +177,7 @@ async function findActiveRoomParticipation(userId: string, excludeRoomId?: strin
   }
 
   participation.room = await repairStuckInProgressRoom(participation.room);
+  participation.room = await repairLobbyRoomWithExistingGame(participation.room);
 
   if (participation.room.currentGameId) {
     const currentGame = await prisma.game.findUnique({
@@ -472,7 +559,8 @@ export async function getRoomInfo(roomCode: string) {
       return null;
     }
 
-    const repairedRoom = await repairStuckInProgressRoom(room);
+    let repairedRoom = await repairStuckInProgressRoom(room);
+    repairedRoom = await repairLobbyRoomWithExistingGame(repairedRoom);
 
     return {
       ...repairedRoom,
