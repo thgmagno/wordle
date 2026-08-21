@@ -774,6 +774,120 @@ export async function startGame(
 }
 
 /**
+ * Change a room's word length after it's already been created. Only the
+ * host may do this, and only while the room is still in LOBBY — the round
+ * count/answer selection for an actual match all assume a single fixed
+ * length locked in at start time, so there's nothing sensible "change the
+ * word length" could mean once a match is IN_PROGRESS or FINISHED.
+ *
+ * Every word already submitted was validated against the OLD length, so
+ * none of them are valid for the new one — they're cleared here, and each
+ * participant (including the host, if they'd already submitted) simply
+ * submits again. This is the same tradeoff playAgain makes for the exact
+ * same reason, just triggered by a length change instead of a finished
+ * match.
+ */
+export async function changeRoomWordLength(
+  roomCode: string,
+  newWordLength: number
+): Promise<{ success: boolean; error?: string }> {
+  const session = await auth();
+  const userId = session?.user?.id;
+
+  if (!userId) {
+    return { success: false, error: "Você precisa estar autenticado" };
+  }
+
+  try {
+    if (
+      !Number.isInteger(newWordLength) ||
+      newWordLength < MIN_WORD_LENGTH ||
+      newWordLength > MAX_WORD_LENGTH
+    ) {
+      return {
+        success: false,
+        error: `O comprimento da palavra deve ser entre ${MIN_WORD_LENGTH} e ${MAX_WORD_LENGTH}`,
+      };
+    }
+
+    const room = await prisma.room.findUnique({
+      where: { code: normalizeRoomCode(roomCode) },
+      select: { id: true, hostId: true, status: true, wordLength: true },
+    });
+
+    if (!room) {
+      return { success: false, error: "Sala não encontrada" };
+    }
+
+    if (room.hostId !== userId) {
+      logger.warn(
+        "security",
+        "Non-host attempted to change room word length",
+        { userId, roomId: room.id },
+        userId
+      );
+      return { success: false, error: "Apenas o anfitrião pode alterar o tamanho da palavra" };
+    }
+
+    if (room.status !== "LOBBY") {
+      return {
+        success: false,
+        error: "Só é possível alterar o tamanho da palavra antes da partida começar",
+      };
+    }
+
+    // No-op: nothing to clear or broadcast, and no reason to burn the
+    // rate limit below on a value that's already current (e.g. the slider
+    // getting dragged back to where it started).
+    if (newWordLength === room.wordLength) {
+      return { success: true };
+    }
+
+    const rateLimit = await checkRateLimit(
+      `change-word-length-${userId}`,
+      RATE_LIMIT_CONFIGS.CHANGE_ROOM_WORD_LENGTH
+    );
+
+    if (!rateLimit.allowed) {
+      logger.warn(
+        "room",
+        "Change word length rate limit exceeded",
+        { userId, roomId: room.id },
+        userId
+      );
+      return { success: false, error: rateLimit.message || "Limite de alterações atingido" };
+    }
+
+    await prisma.submittedWord.deleteMany({ where: { roomId: room.id } });
+
+    await prisma.room.update({
+      where: { id: room.id },
+      data: { wordLength: newWordLength },
+    });
+
+    logger.info(
+      "room",
+      "Tamanho da palavra da sala alterado",
+      { roomId: room.id, oldWordLength: room.wordLength, newWordLength },
+      userId
+    );
+    revalidatePath(`/room/${roomCode}`);
+    emitRoomUpdate(roomCode);
+
+    return { success: true };
+  } catch (error) {
+    logger.error(
+      "room",
+      "Erro ao alterar tamanho da palavra da sala",
+      error as Error,
+      { roomCode, newWordLength },
+      userId
+    );
+    return { success: false, error: "Falha ao alterar o tamanho da palavra" };
+  }
+}
+
+/**
  * Reset a room back to LOBBY after its match has finished, so the same
  * group can play another round without creating a new room and
  * re-sharing the code. Only the host may trigger this — same as
