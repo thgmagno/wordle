@@ -236,7 +236,8 @@ export async function getActiveRoomForUser(): Promise<{
  * client-supplied id, to prevent creating rooms in someone else's name.
  */
 export async function createRoom(
-  wordLength: number
+  wordLength: number,
+  isPublic: boolean = false
 ): Promise<{ success: boolean; roomId?: string; error?: string; activeRoomCode?: string }> {
   const session = await auth();
   const hostId = session?.user?.id;
@@ -295,6 +296,7 @@ export async function createRoom(
             wordLength,
             status: "LOBBY",
             maxPlayers: 10,
+            isPublic: Boolean(isPublic),
           },
         });
         break;
@@ -320,7 +322,7 @@ export async function createRoom(
       },
     });
 
-    logger.info("room", "Sala criada", { roomId: room.id, code: room.code, hostId, wordLength }, hostId);
+    logger.info("room", "Sala criada", { roomId: room.id, code: room.code, hostId, wordLength, isPublic: room.isPublic }, hostId);
     revalidatePath("/");
     return { success: true, roomId: room.code };
   } catch (error) {
@@ -972,6 +974,159 @@ export async function changeRoomWordLength(
       userId
     );
     return { success: false, error: "Falha ao alterar o tamanho da palavra" };
+  }
+}
+
+/**
+ * Toggle whether a room shows up in the dashboard's public-rooms browser
+ * (see getPublicRooms below) — anyone who already has the code can always
+ * join a LOBBY room regardless of this flag; it only controls whether
+ * strangers can *discover* it without the code. Only the host may change
+ * it, and only while still in LOBBY — once a match starts, joining is
+ * blocked entirely regardless of visibility (see joinRoom), so there's
+ * nothing meaningful "public" could still mean at that point.
+ *
+ * Unlike changeRoomWordLength, flipping this never invalidates anything
+ * already in the room (no submitted words become wrong, no one needs to
+ * redo anything), so this applies immediately with no confirmation step.
+ */
+export async function changeRoomVisibility(
+  roomCode: string,
+  isPublic: boolean
+): Promise<{ success: boolean; error?: string }> {
+  const session = await auth();
+  const userId = session?.user?.id;
+
+  if (!userId) {
+    return { success: false, error: "Você precisa estar autenticado" };
+  }
+
+  try {
+    const room = await prisma.room.findUnique({
+      where: { code: normalizeRoomCode(roomCode) },
+      select: { id: true, hostId: true, status: true, isPublic: true },
+    });
+
+    if (!room) {
+      return { success: false, error: "Sala não encontrada" };
+    }
+
+    if (room.hostId !== userId) {
+      logger.warn(
+        "security",
+        "Non-host attempted to change room visibility",
+        { userId, roomId: room.id },
+        userId
+      );
+      return { success: false, error: "Apenas o anfitrião pode alterar a visibilidade da sala" };
+    }
+
+    if (room.status !== "LOBBY") {
+      return {
+        success: false,
+        error: "Só é possível alterar a visibilidade antes da partida começar",
+      };
+    }
+
+    const nextIsPublic = Boolean(isPublic);
+
+    if (nextIsPublic === room.isPublic) {
+      return { success: true };
+    }
+
+    await prisma.room.update({
+      where: { id: room.id },
+      data: { isPublic: nextIsPublic },
+    });
+
+    logger.info(
+      "room",
+      "Visibilidade da sala alterada",
+      { roomId: room.id, isPublic: nextIsPublic },
+      userId
+    );
+    revalidatePath(`/room/${roomCode}`);
+    emitRoomUpdate(roomCode);
+
+    return { success: true };
+  } catch (error) {
+    logger.error(
+      "room",
+      "Erro ao alterar visibilidade da sala",
+      error as Error,
+      { roomCode, isPublic },
+      userId
+    );
+    return { success: false, error: "Falha ao alterar a visibilidade da sala" };
+  }
+}
+
+/**
+ * List open, public rooms for the dashboard's "Salas Públicas" browser —
+ * the matchmaking-lite alternative to always having to share a code
+ * manually. Requires auth (this is a direct server action call, not just
+ * a page render, so it needs its own check even though the dashboard that
+ * renders it is already behind login) and excludes whatever room the
+ * caller is already active in themselves — showing your own room in a
+ * "browse other rooms" list is just noise, and joining it again would be
+ * a no-op anyway.
+ *
+ * `limit` is clamped to [0, 50] regardless of what's requested — an
+ * unbounded or absurdly large value here would mean loading a lot more
+ * of the collection into memory than a browse list ever needs.
+ */
+export async function getPublicRooms(limit: number = 50): Promise<
+  Array<{
+    code: string;
+    wordLength: number;
+    participantCount: number;
+    maxPlayers: number;
+    host: { id: string; name: string | null; image: string | null };
+  }>
+> {
+  const session = await auth();
+  const userId = session?.user?.id;
+
+  if (!userId) {
+    return [];
+  }
+
+  try {
+    const clampedLimit = Math.min(50, Math.max(0, Math.trunc(limit) || 0));
+
+    if (clampedLimit === 0) {
+      return [];
+    }
+
+    const rooms = await prisma.room.findMany({
+      where: {
+        isPublic: true,
+        status: "LOBBY",
+        // Excludes the caller's own room — see this function's own doc
+        // comment. `none` rather than checking `hostId !== userId` alone:
+        // a public room the caller merely *joined* (not hosted) should be
+        // excluded the same way, and this is the one query that already
+        // has every ACTIVE participant available to check against.
+        participants: { none: { userId, status: "ACTIVE" } },
+      },
+      include: {
+        host: { select: { id: true, name: true, image: true } },
+        participants: { where: { status: "ACTIVE" }, select: { id: true } },
+      },
+      orderBy: { createdAt: "desc" },
+      take: clampedLimit,
+    });
+
+    return rooms.map((room: any) => ({
+      code: room.code,
+      wordLength: room.wordLength,
+      participantCount: room.participants.length,
+      maxPlayers: room.maxPlayers,
+      host: room.host,
+    }));
+  } catch (error) {
+    logger.error("room", "Erro ao listar salas públicas", error as Error, { userId }, userId);
+    return [];
   }
 }
 
