@@ -45,6 +45,11 @@ function gameChannel(gameId: string): string {
   return `game-${gameId}`;
 }
 
+// Fixed name, unlike the per-room/per-game channels above: there's exactly
+// one "list of open public rooms" for the whole app to agree on, not one
+// per room.
+const PUBLIC_ROOMS_CHANNEL = "public-rooms";
+
 /**
  * Notify every client watching a room's lobby that something changed
  * (a player joined/left, a word was submitted, the host started the
@@ -74,6 +79,29 @@ export function emitGameUpdate(gameId: string): void {
       "Falha ao publicar atualização de jogo via Pusher",
       error as Error,
       { gameId },
+    );
+  });
+}
+
+/**
+ * Notify every client watching the dashboard's "Salas Públicas" browser
+ * that the set of open public rooms may have changed — one was created,
+ * had its visibility toggled, gained/lost a participant, started a match,
+ * or reopened via "Jogar Novamente". Fired alongside emitRoomUpdate at
+ * every one of those call sites rather than only when the room in
+ * question is actually public: filtering that server-side per caller
+ * would mean re-fetching the room's isPublic flag in several places just
+ * to decide whether to bother, for a broadcast that's already cheap and,
+ * like the per-room/per-game channels, carries no payload — clients just
+ * refetch via getPublicRooms (see usePublicRoomsRealtime) rather than
+ * trust anything pushed over the wire.
+ */
+export function emitPublicRoomsUpdate(): void {
+  pusher?.trigger(PUBLIC_ROOMS_CHANNEL, "public-rooms:update", {}).catch((error) => {
+    logger.error(
+      "realtime",
+      "Falha ao publicar atualização de salas públicas via Pusher",
+      error as Error,
     );
   });
 }

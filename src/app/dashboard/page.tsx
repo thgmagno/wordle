@@ -6,6 +6,7 @@ import { getUserStatistics } from "@/server/ranking-actions";
 import { getActiveRoomForUser, getPublicRooms } from "@/server/room-actions";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { LeaveRoomButton } from "@/components/leave-room-button";
+import { PublicRoomsRealtime } from "@/components/public-rooms-realtime";
 
 export default async function DashboardPage() {
   const session = await auth();
@@ -185,6 +186,13 @@ export default async function DashboardPage() {
               </Link>
             </div>
           </div>
+
+          {/* Live-refreshes the card below on any "public-rooms:update"
+              (see emitPublicRoomsUpdate's callers) — mounted whenever the
+              card itself *could* apply, not only while it's non-empty,
+              so a room going public while this list is empty still makes
+              the card appear without needing an F5. */}
+          {!activeRoom && <PublicRoomsRealtime />}
 
           {/* Public Rooms — matchmaking-lite: rooms whose host opted into
               "Sala Pública" (see room/create and the lobby's own toggle)
