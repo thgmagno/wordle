@@ -10,13 +10,76 @@ import { emitRoomUpdate } from "@/lib/realtime";
 import { generateRoomCode, normalizeRoomCode } from "@/lib/room-code";
 
 /**
+ * Find the room (if any) a user currently has an ACTIVE participation in,
+ * restricted to rooms that haven't finished (LOBBY or IN_PROGRESS) — a
+ * FINISHED room has nothing to go back to, so it doesn't count as "still
+ * in a room" either for the dashboard's "Sala Atual" card or the
+ * one-room-at-a-time guard below. Shared by createRoom, joinRoom, and
+ * getActiveRoomForUser so all three agree on exactly what "already in a
+ * room" means.
+ */
+async function findActiveRoomParticipation(userId: string, excludeRoomId?: string) {
+  return prisma.roomParticipant.findFirst({
+    where: {
+      userId,
+      status: "ACTIVE",
+      roomId: excludeRoomId ? { not: excludeRoomId } : undefined,
+      room: { status: { in: ["LOBBY", "IN_PROGRESS"] } },
+    },
+    include: {
+      room: {
+        include: { participants: { where: { status: "ACTIVE" } } },
+      },
+    },
+  });
+}
+
+/**
+ * Get the room the currently authenticated user is already active in, if
+ * any — used by the dashboard to offer a way back into it (a user who hit
+ * the browser's back button after joining/creating a room otherwise had
+ * no link back to it short of knowing the code by heart) and to explain
+ * why creating/joining another room is blocked.
+ */
+export async function getActiveRoomForUser(): Promise<{
+  code: string;
+  wordLength: number;
+  status: "LOBBY" | "IN_PROGRESS";
+  participantCount: number;
+} | null> {
+  const session = await auth();
+  const userId = session?.user?.id;
+
+  if (!userId) {
+    return null;
+  }
+
+  try {
+    const participation = await findActiveRoomParticipation(userId);
+    if (!participation) {
+      return null;
+    }
+
+    return {
+      code: participation.room.code,
+      wordLength: participation.room.wordLength,
+      status: participation.room.status as "LOBBY" | "IN_PROGRESS",
+      participantCount: participation.room.participants.length,
+    };
+  } catch (error) {
+    console.error("Error getting active room for user:", error);
+    return null;
+  }
+}
+
+/**
  * Create a new game room.
  * The host is always the currently authenticated user — never a
  * client-supplied id, to prevent creating rooms in someone else's name.
  */
 export async function createRoom(
   wordLength: number
-): Promise<{ success: boolean; roomId?: string; error?: string }> {
+): Promise<{ success: boolean; roomId?: string; error?: string; activeRoomCode?: string }> {
   const session = await auth();
   const hostId = session?.user?.id;
 
@@ -27,6 +90,18 @@ export async function createRoom(
   try {
     if (![4, 5, 6].includes(wordLength)) {
       return { success: false, error: "O comprimento da palavra deve ser 4, 5 ou 6" };
+    }
+
+    // One room at a time: creating a second room while already active in
+    // another would leave the user stuck in two places at once, with no
+    // clean way to tell which one they meant to be playing in.
+    const activeElsewhere = await findActiveRoomParticipation(hostId);
+    if (activeElsewhere) {
+      return {
+        success: false,
+        error: "Você já está em uma sala. Saia dela antes de criar uma nova.",
+        activeRoomCode: activeElsewhere.room.code,
+      };
     }
 
     // Check rate limit for room creation
@@ -96,7 +171,7 @@ export async function createRoom(
  */
 export async function joinRoom(
   roomCode: string
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{ success: boolean; error?: string; activeRoomCode?: string }> {
   const session = await auth();
   const userId = session?.user?.id;
 
@@ -147,6 +222,21 @@ export async function joinRoom(
 
     if (existingParticipant && existingParticipant.status === "ACTIVE") {
       return { success: true }; // Already in room
+    }
+
+    // One room at a time: this is a genuine "join" from here on (the
+    // participant above is either missing or LEFT, never this room's own
+    // ACTIVE row), so check whether the user is ACTIVE in a *different*
+    // room before adding them to this one. Excludes this room's id, but
+    // that's only ever relevant in theory — the ACTIVE case for this exact
+    // room already returned above.
+    const activeElsewhere = await findActiveRoomParticipation(userId, roomId);
+    if (activeElsewhere) {
+      return {
+        success: false,
+        error: "Você já está em outra sala. Saia dela antes de entrar em uma nova.",
+        activeRoomCode: activeElsewhere.room.code,
+      };
     }
 
     // Add user to room

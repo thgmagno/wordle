@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { JoinRoomButton } from "@/components/join-room-button";
 import { getUserStatistics } from "@/server/ranking-actions";
+import { getActiveRoomForUser } from "@/server/room-actions";
 import { ThemeToggle } from "@/components/theme-toggle";
 
 export default async function DashboardPage() {
@@ -12,7 +13,10 @@ export default async function DashboardPage() {
     redirect("/auth/signin");
   }
 
-  const stats = await getUserStatistics(session.user.id);
+  const [stats, activeRoom] = await Promise.all([
+    getUserStatistics(session.user.id),
+    getActiveRoomForUser(),
+  ]);
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -42,6 +46,33 @@ export default async function DashboardPage() {
         <div className="max-w-4xl mx-auto">
           <h2 className="text-3xl font-bold mb-8">Painel de Controle</h2>
 
+          {/* Current Room — a user who hit the browser's back button after
+              joining/creating a room ends up back here with no link to it
+              short of knowing the code by heart (the room itself has no
+              way to reach the dashboard's attention). Shown first,
+              highlighted, whenever the server considers them still
+              active in a non-finished room — see getActiveRoomForUser. */}
+          {activeRoom && (
+            <div className="card mb-6 border-2 border-blue-500 dark:border-blue-400">
+              <div className="flex items-center justify-between flex-wrap gap-4">
+                <div>
+                  <h3 className="text-xl font-semibold mb-1">Sala Atual</h3>
+                  <p className="text-slate-600 dark:text-slate-400">
+                    {activeRoom.status === "LOBBY"
+                      ? "Aguardando jogadores"
+                      : "Partida em andamento"}{" "}
+                    · {activeRoom.wordLength} letras ·{" "}
+                    {activeRoom.participantCount}{" "}
+                    {activeRoom.participantCount === 1 ? "jogador" : "jogadores"}
+                  </p>
+                </div>
+                <Link href={`/room/${activeRoom.code}`} className="btn-primary shrink-0">
+                  Voltar para a Sala
+                </Link>
+              </div>
+            </div>
+          )}
+
           {/* Actions Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-12">
             {/* Single Player */}
@@ -58,27 +89,43 @@ export default async function DashboardPage() {
               </Link>
             </div>
 
-            {/* Create Room */}
+            {/* Create Room — the server rejects a second room while
+                already active in one (createRoom's one-room-at-a-time
+                guard), so this offers the way out (leave first) instead
+                of a button that would just fail. */}
             <div className="card hover:shadow-lg transition-shadow">
               <h3 className="text-xl font-semibold mb-2">Criar Sala</h3>
               <p className="text-slate-600 dark:text-slate-400 mb-6">
-                Crie uma nova sala multiplayer e convide seus amigos para jogar
+                {activeRoom
+                  ? "Você já está em uma sala. Saia dela para criar uma nova."
+                  : "Crie uma nova sala multiplayer e convide seus amigos para jogar"}
               </p>
-              <Link
-                href="/room/create"
-                className="btn-primary"
-              >
-                Criar Nova Sala
-              </Link>
+              {activeRoom ? (
+                <Link href={`/room/${activeRoom.code}`} className="btn-secondary">
+                  Ir para Minha Sala
+                </Link>
+              ) : (
+                <Link href="/room/create" className="btn-primary">
+                  Criar Nova Sala
+                </Link>
+              )}
             </div>
 
-            {/* Join Room */}
+            {/* Join Room — same one-room-at-a-time restriction as above. */}
             <div className="card hover:shadow-lg transition-shadow">
               <h3 className="text-xl font-semibold mb-2">Entrar em Sala</h3>
               <p className="text-slate-600 dark:text-slate-400 mb-6">
-                Entre em uma sala existente usando o código da sala
+                {activeRoom
+                  ? "Você já está em uma sala. Saia dela para entrar em outra."
+                  : "Entre em uma sala existente usando o código da sala"}
               </p>
-              <JoinRoomButton />
+              {activeRoom ? (
+                <Link href={`/room/${activeRoom.code}`} className="btn-secondary">
+                  Ir para Minha Sala
+                </Link>
+              ) : (
+                <JoinRoomButton />
+              )}
             </div>
 
             {/* Leaderboard */}
@@ -148,7 +195,7 @@ export default async function DashboardPage() {
               </div>
             </div>
 
-            {(!stats || stats.totalGamesPlayed === 0) && (
+            {(!stats || stats.totalGamesPlayed === 0) && !activeRoom && (
               <p className="mt-6 text-center text-sm text-slate-600 dark:text-slate-400">
                 Você ainda não jogou nenhuma partida.{" "}
                 <Link href="/room/create" className="text-blue-600 dark:text-blue-400 hover:underline">

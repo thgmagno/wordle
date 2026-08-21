@@ -11,10 +11,18 @@ export default function CreateRoomPage() {
   const [wordLength, setWordLength] = useState(5);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Set only for the "already in another room" rejection — offers a
+  // direct link back to it instead of just an error with no way out. A
+  // click from the dashboard's own "Criar Sala" card shouldn't normally
+  // reach this (it links to /room/[code] instead in that state), but this
+  // page is also reachable by a direct URL, which has no way to know that
+  // ahead of time.
+  const [activeRoomCode, setActiveRoomCode] = useState<string | null>(null);
 
   const handleCreateRoom = async () => {
     setIsLoading(true);
     setError(null);
+    setActiveRoomCode(null);
 
     try {
       // Get current user ID from session
@@ -32,6 +40,7 @@ export default function CreateRoomPage() {
         router.push(`/room/${result.roomId}`);
       } else {
         setError(result.error || "Erro ao criar sala");
+        setActiveRoomCode(result.activeRoomCode ?? null);
       }
     } catch (err) {
       setError("Erro ao criar sala. Tente novamente.");
@@ -68,6 +77,14 @@ export default function CreateRoomPage() {
             {error && (
               <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-800 dark:text-red-300 px-4 py-3 rounded-lg mb-6">
                 {error}
+                {activeRoomCode && (
+                  <Link
+                    href={`/room/${activeRoomCode}`}
+                    className="block mt-2 font-semibold underline"
+                  >
+                    Voltar para Minha Sala
+                  </Link>
+                )}
               </div>
             )}
 

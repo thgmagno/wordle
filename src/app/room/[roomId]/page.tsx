@@ -25,15 +25,34 @@ function RoomShell({ children }: { children: React.ReactNode }) {
   );
 }
 
-function RoomUnavailable({ title, message }: { title: string; message: string }) {
+function RoomUnavailable({
+  title,
+  message,
+  activeRoomCode,
+}: {
+  title: string;
+  message: string;
+  // When set, this is specifically the "you're already in another room"
+  // case — a direct link back to THAT room is far more useful here than
+  // just a dashboard link, since it's the whole reason the user landed on
+  // this screen in the first place (see CLAUDE.md's navigation feedback).
+  activeRoomCode?: string;
+}) {
   return (
     <RoomShell>
       <div className="text-center">
         <h1 className="text-3xl font-bold mb-4">{title}</h1>
         <p className="text-slate-600 dark:text-slate-400 mb-8">{message}</p>
-        <Link href="/dashboard" className="btn-primary">
-          Voltar para Dashboard
-        </Link>
+        <div className="flex gap-3 justify-center flex-wrap">
+          {activeRoomCode && (
+            <Link href={`/room/${activeRoomCode}`} className="btn-primary">
+              Voltar para Minha Sala
+            </Link>
+          )}
+          <Link href="/dashboard" className={activeRoomCode ? "btn-secondary" : "btn-primary"}>
+            Voltar para Dashboard
+          </Link>
+        </div>
       </div>
     </RoomShell>
   );
@@ -110,6 +129,7 @@ export default async function RoomPage({
         <RoomUnavailable
           title="Não foi possível entrar na sala"
           message={joinResult.error || "A sala não está aceitando novos jogadores no momento."}
+          activeRoomCode={joinResult.activeRoomCode}
         />
       );
     }

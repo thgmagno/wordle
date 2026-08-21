@@ -1,7 +1,18 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { auth } from "@/lib/auth";
 
-export default function HomePage() {
+export default async function HomePage() {
+  // A signed-in user clicking the "Wordle" header link elsewhere in the
+  // app lands here too (it always points at "/") — without this they'd
+  // hit the logged-out marketing page and have to sign in all over again
+  // just to get back to their own dashboard.
+  const session = await auth();
+  if (session?.user?.id) {
+    redirect("/dashboard");
+  }
+
   return (
     <div className="min-h-screen flex flex-col">
       {/* Header */}
