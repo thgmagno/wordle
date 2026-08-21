@@ -171,6 +171,17 @@ export const RATE_LIMIT_CONFIGS = {
     message: "Aguarde antes de enviar outra dica.",
   } as RateLimitConfig,
 
+  // Anfitrião reiniciando a mesma sala para outra partida ("Jogar
+  // Novamente"), em vez de precisar criar uma sala nova e reenviar o
+  // código. Generoso o bastante para um grupo jogar várias partidas
+  // seguidas numa sessão normal — o limite existe só para conter cliques
+  // automatizados/abuso, não o uso legítimo.
+  PLAY_AGAIN: {
+    windowMs: 5 * 60 * 1000, // 5 minutos
+    maxRequests: 15,
+    message: "Muitas partidas reiniciadas. Aguarde um pouco.",
+  } as RateLimitConfig,
+
   // Sortear uma palavra aleatória do dicionário para preencher o campo de
   // palavra secreta. Generoso de propósito — o objetivo é deixar o jogador
   // clicar várias vezes seguidas até gostar de uma sugestão, então o limite

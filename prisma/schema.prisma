@@ -126,12 +126,22 @@ model Room {
   updatedAt         DateTime           @updatedAt
   gameStartedAt     DateTime?
   gameEndedAt       DateTime?
+  // The room's currently-relevant Game, if any — set when a match starts
+  // (startGameInternal) and cleared when the host resets the room back to
+  // LOBBY for another round without making everyone re-share the code
+  // (playAgain). A room can rack up many Games across its lifetime this
+  // way, so `games` below (its full history) can't double as "the current
+  // one" the way a to-one relation used to — every FINISHED Game stays in
+  // that list forever. Plain scalar rather than a formal relation since
+  // every caller just needs the id (to link to `/game/[id]` or to check
+  // whether it's finished), never a populated Game object.
+  currentGameId     String?            @db.ObjectId
 
   // Relations
   host             User              @relation("RoomHost", fields: [hostId], references: [id], onDelete: Cascade)
   participants     RoomParticipant[]
   submittedWords   SubmittedWord[]
-  game             Game?
+  games            Game[]
 
   @@index([status])
   @@index([hostId])
@@ -194,7 +204,11 @@ model SubmittedWord {
 
 model Game {
   id            String   @id @default(auto()) @map("_id") @db.ObjectId
-  roomId        String   @unique @db.ObjectId
+  // Not unique: a room can play more than one match across its lifetime
+  // (see Room.currentGameId and playAgain in room-actions.ts) — every
+  // match still gets its own Game document, kept around as history after
+  // it finishes, rather than being reused or overwritten in place.
+  roomId        String   @db.ObjectId
   status        GameStatus @default(ACTIVE)
   totalRounds   Int      // Number of rounds = number of players
   currentRound  Int      @default(1)
@@ -205,6 +219,7 @@ model Game {
   room   Room    @relation(fields: [roomId], references: [id], onDelete: Cascade)
   rounds Round[]
 
+  @@index([roomId])
   @@index([status])
 }
 

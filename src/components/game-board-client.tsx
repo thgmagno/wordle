@@ -1,7 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { submitAttempt, advanceToNextRound, sendRoundHint } from "@/server/game-actions";
+import { playAgain } from "@/server/room-actions";
 import { useGameRealtime } from "@/lib/use-realtime";
 import { MAX_ATTEMPTS } from "@/lib/wordle-evaluation";
 import { Toast } from "./toast";
@@ -24,7 +26,12 @@ interface GameState {
   totalRounds: number;
   isSpectator: boolean;
   rounds: any[];
-  room: { wordLength: number };
+  // `code` and `status` here are the ROOM's own fields, not the match's —
+  // used by the "Jogar Novamente" flow: `code` to link back into the room,
+  // `status` to detect the moment the host resets the room to LOBBY (see
+  // the redirect effect below) so everyone still looking at the final
+  // placar, not just the host, gets moved along too.
+  room: { wordLength: number; code: string; status: string };
   matchResults?: MatchResultEntry[];
 }
 
@@ -270,6 +277,7 @@ export default function GameBoardClient({
   isHost: boolean;
 }) {
   useGameRealtime(gameId);
+  const router = useRouter();
 
   const [word, setWord] = useState("");
   const [attempts, setAttempts] = useState(gameState.rounds[0]?.attempts || []);
@@ -330,6 +338,21 @@ export default function GameBoardClient({
       }
     }
   }, [attempts]);
+
+  // Once the host chooses "Jogar Novamente" (see handlePlayAgain below),
+  // the room goes back to LOBBY while this specific match stays FINISHED
+  // forever — it's frozen history, not something that un-finishes. A
+  // realtime "game:update" re-fetches this same finished game's state
+  // (see getGameState/playAgain in room-actions.ts), which carries the
+  // room's current status right along with it, so this is how everyone
+  // still looking at the final placar — not just the host who clicked the
+  // button — gets moved back into the room to submit a new word, instead
+  // of being left stranded on a stale scoreboard.
+  useEffect(() => {
+    if (gameState.status === "FINISHED" && gameState.room.status === "LOBBY") {
+      router.push(`/room/${gameState.room.code}`);
+    }
+  }, [gameState.status, gameState.room.status, gameState.room.code, router]);
 
   const handleSubmitAttempt = async () => {
     if (word.length !== wordLength) {
@@ -435,6 +458,32 @@ export default function GameBoardClient({
     }
   };
 
+  // Host-only: resets the room back to LOBBY for another match without
+  // making everyone create/join a new room and re-share the code — see
+  // playAgain in room-actions.ts. Reuses the same `isLoading`/`error`
+  // state as the round-play handlers above; safe since none of those
+  // paths are reachable anymore once the FINISHED screen (the only place
+  // this is called from) is showing.
+  const handlePlayAgain = async () => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const result = await playAgain(gameState.room.code);
+
+      if (result.success) {
+        router.push(`/room/${gameState.room.code}`);
+      } else {
+        setError(result.error || "Erro ao reiniciar a sala");
+        setIsLoading(false);
+      }
+    } catch (err) {
+      setError("Erro ao reiniciar a sala");
+      console.error(err);
+      setIsLoading(false);
+    }
+  };
+
   const handleKeyPress = (key: string) => {
     if (isGameOver || isLoading) return;
 
@@ -459,9 +508,38 @@ export default function GameBoardClient({
         {gameState.matchResults && gameState.matchResults.length > 0 && (
           <FinalScoreboard results={gameState.matchResults} />
         )}
-        <a href="/dashboard" className="btn-primary inline-flex">
-          Voltar para Dashboard
-        </a>
+
+        {error && (
+          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-800 dark:text-red-300 px-4 py-3 rounded-lg text-sm">
+            {error}
+          </div>
+        )}
+
+        <div className="flex flex-col sm:flex-row gap-3 justify-center">
+          {/* Host-only: keeps the same room/code instead of everyone
+              having to create a new room and re-share it — see
+              handlePlayAgain/playAgain. Non-hosts just wait; the redirect
+              effect above moves them along automatically once the host
+              does this. */}
+          {isHost && (
+            <button
+              onClick={handlePlayAgain}
+              disabled={isLoading}
+              className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isLoading ? "Preparando nova partida..." : "🔁 Jogar Novamente"}
+            </button>
+          )}
+          <a href="/dashboard" className="btn-secondary inline-flex items-center justify-center">
+            Voltar para Dashboard
+          </a>
+        </div>
+
+        {!isHost && (
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            O anfitrião pode optar por jogar novamente nesta mesma sala.
+          </p>
+        )}
       </div>
     );
   }
