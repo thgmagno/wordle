@@ -26,6 +26,56 @@ function getPusherClient(): PusherClient | null {
 }
 
 /**
+ * Re-pulls fresh server state — and nudges the Pusher connection back to
+ * life if it isn't already — the moment the tab becomes visible again.
+ * Returns the listeners' own cleanup function, for the caller's effect to
+ * return.
+ *
+ * Mobile browsers aggressively suspend backgrounded tabs: JS timers stop
+ * and the WebSocket connection is frequently dropped outright. Switching
+ * away from the app — the home button, the app switcher, a phone call —
+ * and back is extremely common on mobile, and it can leave a realtime
+ * subscription silently dead: Pusher's own reconnect logic can't run
+ * while the tab is suspended, and whatever "room:update"/"game:update"
+ * events fired on the server during that gap are just gone — Pusher
+ * doesn't replay missed events on reconnect. A `useEffect` that runs once
+ * on mount doesn't help here, despite how it might seem like it should:
+ * the component never unmounts just because the tab was backgrounded, so
+ * a mount-only effect never gets a chance to re-fire. Listening for the
+ * tab's own visibility instead catches exactly the moment that matters,
+ * whether or not Pusher itself ever noticed the gap. `pageshow` is added
+ * alongside `visibilitychange` as a second signal for the same event,
+ * covering Safari's back/forward cache restoring the whole page — JS
+ * state and all — without a normal mount ever happening.
+ */
+function bindForegroundRefresh(
+  client: PusherClient,
+  router: ReturnType<typeof useRouter>,
+  suppressRefreshRef?: RefObject<boolean>,
+): () => void {
+  const handleForeground = () => {
+    if (document.visibilityState !== "visible") {
+      return;
+    }
+    if (suppressRefreshRef?.current) {
+      return;
+    }
+    if (client.connection.state !== "connected") {
+      client.connect();
+    }
+    router.refresh();
+  };
+
+  document.addEventListener("visibilitychange", handleForeground);
+  window.addEventListener("pageshow", handleForeground);
+
+  return () => {
+    document.removeEventListener("visibilitychange", handleForeground);
+    window.removeEventListener("pageshow", handleForeground);
+  };
+}
+
+/**
  * Subscribes to realtime updates for a room's lobby. Any "room:update"
  * event (emitted by the server after a join/leave/word submission/game
  * start) triggers a Server Component refresh, so the lobby reflects the
@@ -65,9 +115,12 @@ export function useRoomRealtime(
     };
     channel.bind("room:update", handleUpdate);
 
+    const unbindForegroundRefresh = bindForegroundRefresh(client, router, suppressRefreshRef);
+
     return () => {
       channel.unbind("room:update", handleUpdate);
       client.unsubscribe(channelName);
+      unbindForegroundRefresh();
     };
   }, [roomId, router, suppressRefreshRef]);
 }
@@ -92,9 +145,12 @@ export function useGameRealtime(gameId: string): void {
     const handleUpdate = () => router.refresh();
     channel.bind("game:update", handleUpdate);
 
+    const unbindForegroundRefresh = bindForegroundRefresh(client, router);
+
     return () => {
       channel.unbind("game:update", handleUpdate);
       client.unsubscribe(channelName);
+      unbindForegroundRefresh();
     };
   }, [gameId, router]);
 }
