@@ -1,0 +1,49 @@
+name: Dictionary Import
+
+# Refreshes the pt-BR word dictionary (npm run dictionary:import) from
+# fserb/pt-br. Deliberately NOT wired into the Vercel build/deploy —
+# the import is idempotent but still pulls the whole upstream lexicon
+# and re-diffs it against ~100k stored words on every run, and a
+# transient GitHub outage while downloading the source would fail the
+# import itself, not something that should ever be able to block an
+# unrelated code deploy. This runs on its own schedule instead, and can
+# always be triggered on demand from the Actions tab (Run workflow)
+# without waiting for the next scheduled run or touching any code.
+#
+# Requires a repository secret named MONGODB_URI pointing at the
+# production database (Settings → Secrets and variables → Actions).
+# Without it this job fails immediately and loudly, rather than
+# silently skipping the import.
+on:
+  schedule:
+    # Mondays at 06:00 UTC. The source repo doesn't change often, so
+    # this is just a low-cost "catch it if it ever does" check — every
+    # run past the first is a no-op (0 added/updated) unless fserb/pt-br
+    # actually published something new.
+    - cron: "0 6 * * 1"
+  workflow_dispatch: {}
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Set at the job level rather than only on the import step, so it's
+    # already in scope for every step that follows — simpler than
+    # threading it through individually, and harmless: `prisma generate`
+    # in the postinstall hook below doesn't actually require it (only the
+    # import step, which connects for real, does).
+    env:
+      MONGODB_URI: ${{ secrets.MONGODB_URI }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Import dictionary
+        run: npm run dictionary:import

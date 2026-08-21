@@ -103,6 +103,17 @@ This script:
 - Stores ~100k+ valid words in MongoDB
 - Is idempotent (safe to run multiple times)
 
+This is **not** wired into the Vercel build — the import re-downloads and
+re-diffs the whole upstream lexicon (~145k lines) against everything
+already stored on every single run, and a transient GitHub outage while
+fetching the source would fail the import itself, not something that
+should ever be able to block an unrelated code deploy. Instead,
+[`.github/workflows/dictionary-import.yml`](.github/workflows/dictionary-import.yml)
+runs it on its own weekly schedule (and can be triggered on demand from
+the Actions tab → "Dictionary Import" → Run workflow) — set a
+`MONGODB_URI` repository secret pointing at the production database for
+it to have something to write to.
+
 ### Development Server
 
 `npm run dev` and `npm run start` run the plain Next.js CLI (`next
