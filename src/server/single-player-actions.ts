@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { checkRateLimit, RATE_LIMIT_CONFIGS } from "@/lib/rate-limit";
 import { evaluateAttempt, MAX_ATTEMPTS } from "@/lib/wordle-evaluation";
 import { getRandomCommonWord, validateAttemptWord } from "@/server/word-service";
+import { MIN_WORD_LENGTH, MAX_WORD_LENGTH } from "@/lib/word-normalization";
 import type { AttemptLetterResult } from "@/types";
 
 /**
@@ -36,10 +37,14 @@ export async function startSinglePlayerGame(
   }
 
   try {
-    if (![4, 5, 6].includes(wordLength)) {
+    if (
+      !Number.isInteger(wordLength) ||
+      wordLength < MIN_WORD_LENGTH ||
+      wordLength > MAX_WORD_LENGTH
+    ) {
       return {
         success: false,
-        error: "O comprimento da palavra deve ser 4, 5 ou 6",
+        error: `O comprimento da palavra deve ser entre ${MIN_WORD_LENGTH} e ${MAX_WORD_LENGTH}`,
       };
     }
 

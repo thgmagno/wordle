@@ -142,7 +142,7 @@ export default function SignInPage() {
                   e.preventDefault();
                   handleGuestSignIn();
                 }}
-                className="flex gap-2"
+                className="flex flex-col sm:flex-row gap-2"
               >
                 <input
                   type="text"
@@ -151,12 +151,12 @@ export default function SignInPage() {
                   placeholder="Seu nome"
                   disabled={isGuestLoading}
                   maxLength={30}
-                  className="input-base flex-1"
+                  className="input-base flex-1 min-w-0"
                 />
                 <button
                   type="submit"
                   disabled={isGuestLoading || !guestName.trim()}
-                  className="btn-secondary shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="btn-secondary w-full sm:w-auto sm:shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isGuestLoading ? "Entrando..." : "Entrar"}
                 </button>

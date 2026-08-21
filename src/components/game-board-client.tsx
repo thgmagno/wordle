@@ -443,7 +443,7 @@ export default function GameBoardClient({
               Sua dica aparece para todos os jogadores desta rodada. Ela não
               pode revelar a palavra secreta.
             </p>
-            <div className="flex gap-2">
+            <div className="flex flex-col sm:flex-row gap-2">
               <input
                 type="text"
                 value={hintText}
@@ -454,13 +454,13 @@ export default function GameBoardClient({
                 placeholder="Ex: começa com a letra C"
                 disabled={isSendingHint}
                 maxLength={MAX_HINT_LENGTH}
-                className="input-base flex-1"
+                className="input-base flex-1 min-w-0"
               />
               <button
                 type="button"
                 onClick={handleSendHint}
                 disabled={isSendingHint || !hintText.trim()}
-                className="btn-primary shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="btn-primary w-full sm:w-auto sm:shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isSendingHint ? "..." : "Enviar"}
               </button>

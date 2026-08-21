@@ -76,8 +76,8 @@ export default function RulesPage() {
             <ul className="space-y-2 text-slate-600 dark:text-slate-400">
               <li>
                 Cada sala é criada com palavras de{" "}
-                <span className="font-semibold text-slate-900 dark:text-white">4, 5 ou 6 letras</span>
-                .
+                <span className="font-semibold text-slate-900 dark:text-white">4 a 10 letras</span>
+                , à sua escolha.
               </li>
               <li>
                 Você tem{" "}

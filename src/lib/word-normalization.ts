@@ -28,11 +28,22 @@ export function normalizeWordForStorage(word: string): { original: string; norma
 }
 
 /**
+ * The range of word lengths the game accepts, for both room/single-player
+ * creation and answer/attempt validation. Single source of truth — every
+ * length check in the app (client word-length pickers, createRoom,
+ * startSinglePlayerGame, validateWordFormat below) reads from these two
+ * constants instead of repeating the bounds, so raising or lowering the
+ * range only ever means changing it here.
+ */
+export const MIN_WORD_LENGTH = 4;
+export const MAX_WORD_LENGTH = 10;
+
+/**
  * Validate if a word has valid length for Wordle
  */
 export function isValidWordLength(word: string): boolean {
   const length = word.length;
-  return length === 4 || length === 5 || length === 6;
+  return length >= MIN_WORD_LENGTH && length <= MAX_WORD_LENGTH;
 }
 
 /**
@@ -66,7 +77,10 @@ export function validateWordFormat(word: string): { valid: boolean; error?: stri
   }
 
   if (!isValidWordLength(trimmed)) {
-    return { valid: false, error: `A palavra deve ter 4, 5 ou 6 letras. Atual: ${trimmed.length}` };
+    return {
+      valid: false,
+      error: `A palavra deve ter entre ${MIN_WORD_LENGTH} e ${MAX_WORD_LENGTH} letras. Atual: ${trimmed.length}`,
+    };
   }
 
   return {
