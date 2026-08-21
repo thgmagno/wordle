@@ -18,6 +18,15 @@ import { MIN_WORD_LENGTH, MAX_WORD_LENGTH } from "@/lib/word-normalization";
  * one-room-at-a-time guard below. Shared by createRoom, joinRoom, and
  * getActiveRoomForUser so all three agree on exactly what "already in a
  * room" means.
+ *
+ * Also excludes a room whose Game already finished, even if Room.status
+ * itself somehow still reads IN_PROGRESS: advanceGameInternal (in
+ * game-actions.ts) flips Game.status and Room.status in two separate
+ * writes, not one transaction, so a failure between them — or a request
+ * that got interrupted — can leave the room stuck showing "in progress"
+ * forever, with no way for anyone to create or join a new room. Checking
+ * the linked Game directly here means a room already in that stuck state
+ * unblocks itself immediately, with no manual data fix needed.
  */
 async function findActiveRoomParticipation(userId: string, excludeRoomId?: string) {
   return prisma.roomParticipant.findFirst({
@@ -25,7 +34,10 @@ async function findActiveRoomParticipation(userId: string, excludeRoomId?: strin
       userId,
       status: "ACTIVE",
       roomId: excludeRoomId ? { not: excludeRoomId } : undefined,
-      room: { status: { in: ["LOBBY", "IN_PROGRESS"] } },
+      room: {
+        status: { in: ["LOBBY", "IN_PROGRESS"] },
+        game: { isNot: { status: "FINISHED" } },
+      },
     },
     include: {
       room: {
