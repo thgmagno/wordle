@@ -15,6 +15,7 @@
     "db:studio": "prisma studio",
     "db:seed": "node scripts/seed.js",
     "dictionary:import": "node scripts/import-dictionary.js",
+    "migrate:backfill-is-guest": "node scripts/backfill-is-guest.js",
     "prisma:generate": "prisma generate"
   },
   "dependencies": {
