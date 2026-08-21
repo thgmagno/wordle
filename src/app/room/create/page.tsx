@@ -110,7 +110,7 @@ export default function CreateRoomPage() {
               <div className="flex items-center justify-between gap-4">
                 <div className="min-w-0">
                   <h3 className="font-semibold text-slate-900 dark:text-white mb-1">
-                    Sala Pública
+                    Visibilidade da Sala
                   </h3>
                   <p className="text-xs text-slate-600 dark:text-slate-400">
                     {isPublic
