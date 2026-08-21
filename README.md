@@ -109,9 +109,10 @@ already stored on every single run, and a transient GitHub outage while
 fetching the source would fail the import itself, not something that
 should ever be able to block an unrelated code deploy. Instead,
 [`.github/workflows/dictionary-import.yml`](.github/workflows/dictionary-import.yml)
-runs it on its own weekly schedule (and can be triggered on demand from
-the Actions tab → "Dictionary Import" → Run workflow) — set a
-`MONGODB_URI` repository secret pointing at the production database for
+runs it manually, on demand, from the Actions tab → "Dictionary Import" →
+Run workflow — no schedule, so it doesn't depend on any one machine being
+on for it to happen, but only actually runs when someone means it to. Set
+a `MONGODB_URI` repository secret pointing at the production database for
 it to have something to write to.
 
 ### Development Server

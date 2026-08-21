@@ -6,21 +6,17 @@ name: Dictionary Import
 # and re-diffs it against ~100k stored words on every run, and a
 # transient GitHub outage while downloading the source would fail the
 # import itself, not something that should ever be able to block an
-# unrelated code deploy. This runs on its own schedule instead, and can
-# always be triggered on demand from the Actions tab (Run workflow)
-# without waiting for the next scheduled run or touching any code.
+# unrelated code deploy. Manual-only on purpose (no `schedule:` trigger):
+# this exists so the import doesn't depend on a specific laptop being
+# around to run it, not to auto-refresh on a timer — trigger it from the
+# Actions tab ("Dictionary Import" → Run workflow) whenever it's actually
+# needed.
 #
 # Requires a repository secret named MONGODB_URI pointing at the
 # production database (Settings → Secrets and variables → Actions).
 # Without it this job fails immediately and loudly, rather than
 # silently skipping the import.
 on:
-  schedule:
-    # Mondays at 06:00 UTC. The source repo doesn't change often, so
-    # this is just a low-cost "catch it if it ever does" check — every
-    # run past the first is a no-op (0 added/updated) unless fserb/pt-br
-    # actually published something new.
-    - cron: "0 6 * * 1"
   workflow_dispatch: {}
 
 jobs:
