@@ -11,6 +11,43 @@ import { generateRoomCode, normalizeRoomCode } from "@/lib/room-code";
 import { MIN_WORD_LENGTH, MAX_WORD_LENGTH } from "@/lib/word-normalization";
 
 /**
+ * Self-heal a room stuck showing IN_PROGRESS with no currentGameId set.
+ * The only way this combination is supposed to exist is for a handful of
+ * milliseconds mid-flight inside startGameInternal, between the moment it
+ * atomically claims the room (LOBBY -> IN_PROGRESS) and the moment it
+ * finishes creating the match and points currentGameId at it — no caller
+ * outside that function should ever actually observe it. But if anything
+ * in between throws (game/round creation failing, a transient Mongo
+ * blip), the room is left permanently stuck in exactly this state unless
+ * something rolls the claim back — startGameInternal now does that for
+ * every failure it can catch, but a room that got stuck here *before*
+ * that fix still needs a way out too. There's nothing to salvage from
+ * this state (no Game was ever fully set up), so the fix is simply to
+ * revert the claim: back to LOBBY, ready for the host's "Iniciar Partida
+ * Agora" fallback (or another word submission) to retry cleanly, instead
+ * of a room that's stuck forever with no way out short of abandoning it.
+ */
+async function repairStuckInProgressRoom<
+  T extends { id: string; status: string; currentGameId: string | null },
+>(room: T): Promise<T> {
+  if (room.status !== "IN_PROGRESS" || room.currentGameId) {
+    return room;
+  }
+
+  await prisma.room.update({
+    where: { id: room.id },
+    data: { status: "LOBBY", gameStartedAt: null },
+  });
+  logger.warn(
+    "room",
+    "Sala presa em IN_PROGRESS sem partida associada — revertida para LOBBY",
+    { roomId: room.id },
+  );
+
+  return { ...room, status: "LOBBY" };
+}
+
+/**
  * Find the room (if any) a user currently has an ACTIVE participation in,
  * restricted to rooms that haven't finished (LOBBY or IN_PROGRESS) — a
  * FINISHED room has nothing to go back to (unless the host uses "Jogar
@@ -52,6 +89,8 @@ async function findActiveRoomParticipation(userId: string, excludeRoomId?: strin
   if (!participation) {
     return null;
   }
+
+  participation.room = await repairStuckInProgressRoom(participation.room);
 
   if (participation.room.currentGameId) {
     const currentGame = await prisma.game.findUnique({
@@ -433,11 +472,13 @@ export async function getRoomInfo(roomCode: string) {
       return null;
     }
 
+    const repairedRoom = await repairStuckInProgressRoom(room);
+
     return {
-      ...room,
-      participantCount: room.participants.length,
-      wordSubmittedBy: room.submittedWords.map((w: any) => w.userId),
-      gameId: room.currentGameId ?? null,
+      ...repairedRoom,
+      participantCount: repairedRoom.participants.length,
+      wordSubmittedBy: repairedRoom.submittedWords.map((w: any) => w.userId),
+      gameId: repairedRoom.currentGameId ?? null,
     };
   } catch (error) {
     console.error("Error getting room info:", error);
@@ -609,45 +650,78 @@ async function startGameInternal(
       return { success: false, error: "O jogo já foi iniciado" };
     }
 
-    // Create game
-    const game = await prisma.game.create({
-      data: {
-        roomId,
-        status: "ACTIVE",
-        totalRounds: participantCount,
-        currentRound: 1,
-      },
-    });
+    // Everything from here until the room is pointed at its new game runs
+    // under its own try/catch: ANYTHING that throws in this block —
+    // game.create, createRound throwing instead of returning
+    // {success:false} (e.g. a transient Mongo error), the final
+    // currentGameId update itself — has to roll the claim above back to
+    // LOBBY, or the room is left stuck IN_PROGRESS with no playable game
+    // and no way for the host to retry, forever (this is exactly what
+    // happened in production: createRound's own {success:false} path was
+    // rolled back correctly, but nothing else in this block was). The
+    // outer catch below only logs and returns failure — it never
+    // undoes the claim, since by the time an exception reaches it there's
+    // no way to tell whether the claim even happened.
+    let game: Awaited<ReturnType<typeof prisma.game.create>> | undefined;
+    try {
+      game = await prisma.game.create({
+        data: {
+          roomId,
+          status: "ACTIVE",
+          totalRounds: participantCount,
+          currentRound: 1,
+        },
+      });
 
-    // Create the first round: pick one of the submitted words as the answer
-    // and put its owner into spectator mode for this round. Without this,
-    // the game record exists but has no playable round.
-    const firstRound = await createRound(game.id, roomId, 1);
+      // Create the first round: pick one of the submitted words as the
+      // answer and put its owner into spectator mode for this round.
+      // Without this, the game record exists but has no playable round.
+      const firstRound = await createRound(game.id, roomId, 1);
 
-    if (!firstRound.success) {
-      // Roll back both the game we just created AND the room status claim
-      // above, so a failure here doesn't leave the room stuck IN_PROGRESS
-      // with no playable game and no way for the host to retry.
-      await prisma.game.delete({ where: { id: game.id } });
+      if (!firstRound.success) {
+        throw new Error(firstRound.error || "Falha ao criar a primeira rodada");
+      }
+
+      // Point the room at this match as its current one.
       await prisma.room.update({
         where: { id: roomId },
-        data: { status: "LOBBY", gameStartedAt: null },
+        data: { currentGameId: game.id },
       });
+    } catch (setupError) {
+      if (game) {
+        await prisma.game.delete({ where: { id: game.id } }).catch(() => {
+          // Already gone, or never fully created — nothing left to clean up.
+        });
+      }
+      await prisma.room
+        .update({
+          where: { id: roomId },
+          data: { status: "LOBBY", gameStartedAt: null },
+        })
+        .catch((rollbackError: unknown) => {
+          // This is the actual "stuck forever" case: the claim can't be
+          // undone. Logged loudly since there's no other way anyone would
+          // find out — the host just sees a room that never starts.
+          logger.error(
+            "game",
+            "Falha ao reverter sala para LOBBY após erro ao iniciar partida — sala pode ficar travada",
+            rollbackError as Error,
+            { roomId },
+            actorUserId
+          );
+        });
       logger.error(
         "game",
-        "Falha ao criar a primeira rodada",
-        new Error(firstRound.error || "unknown"),
-        { roomId, gameId: game.id },
+        "Falha ao configurar partida após reivindicar a sala",
+        setupError as Error,
+        { roomId, gameId: game?.id },
         actorUserId
       );
-      return { success: false, error: firstRound.error || "Falha ao criar a primeira rodada" };
+      return {
+        success: false,
+        error: setupError instanceof Error ? setupError.message : "Falha ao iniciar o jogo",
+      };
     }
-
-    // Point the room at this match as its current one.
-    await prisma.room.update({
-      where: { id: roomId },
-      data: { currentGameId: game.id },
-    });
 
     logger.info("game", "Jogo iniciado", { roomId, gameId: game.id, participantCount, totalRounds: participantCount }, actorUserId);
     revalidatePath(`/room/${room.code}`);
