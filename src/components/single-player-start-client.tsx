@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { WordLengthSlider } from "@/components/word-length-slider";
 import { startSinglePlayerGame } from "@/server/single-player-actions";
 
 interface ActiveGame {
@@ -74,23 +75,11 @@ export default function SinglePlayerStartClient({
 
       <div className="mb-6">
         <p className="block text-sm font-semibold mb-3">Tamanho da Palavra</p>
-        <div className="grid grid-cols-3 gap-3">
-          {[4, 5, 6].map((length) => (
-            <button
-              key={length}
-              type="button"
-              onClick={() => setWordLength(length)}
-              disabled={isLoading}
-              className={`py-4 rounded-lg font-bold text-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-                wordLength === length
-                  ? "bg-blue-600 text-white"
-                  : "bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-white hover:bg-slate-200 dark:hover:bg-slate-600"
-              }`}
-            >
-              {length}
-            </button>
-          ))}
-        </div>
+        <WordLengthSlider
+          value={wordLength}
+          onChange={setWordLength}
+          disabled={isLoading}
+        />
       </div>
 
       <button

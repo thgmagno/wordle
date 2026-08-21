@@ -61,6 +61,12 @@ describe("Word Normalization", () => {
       expect(isValidWordLength("porque")).toBe(true);
     });
 
+    it("should accept 7-to-10-letter words", () => {
+      expect(isValidWordLength("porque1a")).toBe(true); // 8
+      expect(isValidWordLength("porque1ab")).toBe(true); // 9
+      expect(isValidWordLength("porque1abc")).toBe(true); // 10
+    });
+
     it("should reject 1-letter words", () => {
       expect(isValidWordLength("a")).toBe(false);
     });
@@ -69,8 +75,8 @@ describe("Word Normalization", () => {
       expect(isValidWordLength("gat")).toBe(false);
     });
 
-    it("should reject 7-letter words", () => {
-      expect(isValidWordLength("porque1")).toBe(false);
+    it("should reject 11-letter words", () => {
+      expect(isValidWordLength("porque1abcd")).toBe(false);
     });
   });
 

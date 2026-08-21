@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createRoom } from "@/server/room-actions";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { WordLengthSlider } from "@/components/word-length-slider";
 import Link from "next/link";
 
 export default function CreateRoomPage() {
@@ -93,22 +94,8 @@ export default function CreateRoomPage() {
               <label className="block text-sm font-semibold text-slate-900 dark:text-white mb-4">
                 Tamanho da Palavra
               </label>
-              <div className="grid grid-cols-3 gap-4">
-                {[4, 5, 6].map((length) => (
-                  <button
-                    key={length}
-                    onClick={() => setWordLength(length)}
-                    className={`py-4 rounded-lg font-bold text-lg transition-all ${
-                      wordLength === length
-                        ? "bg-blue-600 text-white shadow-lg"
-                        : "bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-white hover:bg-slate-200 dark:hover:bg-slate-600"
-                    }`}
-                  >
-                    {length}
-                  </button>
-                ))}
-              </div>
-              <p className="text-xs text-slate-600 dark:text-slate-400 mt-2">
+              <WordLengthSlider value={wordLength} onChange={setWordLength} disabled={isLoading} />
+              <p className="text-xs text-slate-600 dark:text-slate-400 mt-3">
                 Escolha quantas letras terão as palavras nesta sala
               </p>
             </div>
@@ -131,19 +118,6 @@ export default function CreateRoomPage() {
             </Link>
           </div>
 
-          {/* Info Cards */}
-          <div className="mt-8 grid grid-cols-3 gap-4">
-            {[
-              { length: 4, label: "Fácil" },
-              { length: 5, label: "Normal" },
-              { length: 6, label: "Difícil" },
-            ].map(({ length, label }) => (
-              <div key={length} className="bg-white dark:bg-slate-800 rounded-lg p-4 text-center">
-                <div className="text-2xl font-bold text-blue-600 mb-1">{length}</div>
-                <p className="text-xs text-slate-600 dark:text-slate-400">{label}</p>
-              </div>
-            ))}
-          </div>
         </div>
       </main>
 

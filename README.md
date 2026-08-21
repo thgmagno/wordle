@@ -95,9 +95,9 @@ npm run dictionary:import
 
 This script:
 - Downloads words from the fserb/pt-br repository
-- Filters for 4-to-10-letter words (the game itself only plays 4/5/6-letter
-  rounds — see "Word Validation" below — but the dictionary also stores
-  longer words as they appear in the source, ready for a future game mode)
+- Filters for 4-to-10-letter words — the same range the game itself plays
+  (see MIN_WORD_LENGTH/MAX_WORD_LENGTH in
+  `src/lib/word-normalization.ts` and "Word Validation" below)
 - Normalizes Portuguese characters (accents, special characters)
 - Identifies blocked/negative words
 - Stores ~100k+ valid words in MongoDB
@@ -186,7 +186,7 @@ Words are validated both client-side and server-side:
 - Dictionary lookup via MongoDB
 - Blocked word detection
 - Portuguese character validation
-- Length verification (4, 5, or 6 letters)
+- Length verification (4 to 10 letters)
 
 ### Room Management
 

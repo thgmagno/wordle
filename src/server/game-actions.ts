@@ -527,6 +527,36 @@ export async function getGameState(gameId: string) {
       }));
     }
 
+    // Lightweight per-player status for this round — "still guessing" vs.
+    // "solved it" vs. "ran out of attempts" — safe to show to EVERYONE
+    // (spectator and every active player alike), unlike `othersProgress`
+    // above: it's just a count and two booleans, never an attempt's actual
+    // letters/results, so it can't spell out the answer the way a peer's
+    // winning row does. This is exactly the "did fulano already get it?"
+    // question a table of people playing together keeps asking out loud —
+    // the round has always tracked it server-side (haveAllPlayersFinishedRound
+    // in submitAttempt already computes the same "done" condition per
+    // player to decide when to auto-advance); this just exposes it.
+    const attemptsByUserId = new Map<string, typeof round.attempts>();
+    for (const attempt of round.attempts) {
+      const list = attemptsByUserId.get(attempt.userId) ?? [];
+      list.push(attempt);
+      attemptsByUserId.set(attempt.userId, list);
+    }
+    const playersStatus = fullGame.room.participants
+      .filter((p: any) => p.userId !== round.wordOwnerId)
+      .map((p: any) => {
+        const playerAttempts = attemptsByUserId.get(p.userId) ?? [];
+        const hasWon = playerAttempts.some((a: any) => a.isCorrect);
+        const attemptCount = playerAttempts.length;
+        return {
+          user: p.user,
+          attemptCount,
+          hasWon,
+          isDone: hasWon || attemptCount >= MAX_ATTEMPTS,
+        };
+      });
+
     // The answer is only safe to reveal once the round is truly over for
     // everyone (round.status flips to FINISHED only once every active
     // player has solved it or run out of attempts — see submitAttempt) —
@@ -583,6 +613,7 @@ export async function getGameState(gameId: string) {
           ...round,
           attempts: ownAttempts,
           othersProgress,
+          playersStatus,
           wordOwner,
           answerWord: canRevealAnswer ? round.answerWord : undefined,
         },

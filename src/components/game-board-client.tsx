@@ -43,6 +43,61 @@ interface RoundHintEntry {
   text: string;
 }
 
+interface PlayerStatusEntry {
+  user: { id: string; name: string | null; image: string | null };
+  attemptCount: number;
+  hasWon: boolean;
+  isDone: boolean;
+}
+
+/**
+ * Compact "who's still guessing, who's already done" status row — safe
+ * to show to every active player, unlike OthersProgressList above (see
+ * its own comment): just a count and two booleans, never an attempt's
+ * actual letters/results, so it can never spell out the answer the way
+ * a peer's winning row would. This answers exactly the question a table
+ * of people playing together keeps asking out loud mid-round: "fulano
+ * já acertou?"
+ */
+function PlayersStatusList({
+  players,
+  maxAttempts,
+}: {
+  players: PlayerStatusEntry[];
+  maxAttempts: number;
+}) {
+  if (players.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="flex flex-wrap gap-1.5 justify-center">
+      {players.map((player) => (
+        <div
+          key={player.user.id}
+          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs border ${
+            player.hasWon
+              ? "bg-green-50 dark:bg-green-900/20 border-green-300 dark:border-green-700 text-green-800 dark:text-green-300"
+              : player.isDone
+                ? "bg-slate-100 dark:bg-slate-700 border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300"
+                : "bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800 text-blue-800 dark:text-blue-300"
+          }`}
+        >
+          {player.user.image ? (
+            <img src={player.user.image} alt="" className="w-4 h-4 rounded-full shrink-0" />
+          ) : (
+            <div className="w-4 h-4 rounded-full bg-slate-300 dark:bg-slate-600 shrink-0" />
+          )}
+          <span className="font-medium truncate max-w-[6rem]">{player.user.name || "Jogador"}</span>
+          <span className="shrink-0">
+            {player.hasWon ? "✅" : player.isDone ? "❌" : `${player.attemptCount}/${maxAttempts}`}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /**
  * Read-only board list for every OTHER active player's guesses this
  * round — spectator-only (see getGameState's comment on `othersProgress`
@@ -230,6 +285,7 @@ export default function GameBoardClient({
   const currentRound = gameState.rounds[0];
   const maxAttempts = MAX_ATTEMPTS;
   const wordLength = gameState.room.wordLength;
+  const playersStatus: PlayerStatusEntry[] = currentRound?.playersStatus ?? [];
 
   // Realtime updates re-render this component with a fresh `gameState` prop
   // instead of remounting it, so local per-round state needs to be reset
@@ -431,6 +487,8 @@ export default function GameBoardClient({
           </p>
         </div>
 
+        <PlayersStatusList players={playersStatus} maxAttempts={maxAttempts} />
+
         {/* Only while the round is still ACTIVE — once it's FINISHED there's
             nobody left to send a hint to; the round-advance controls below
             take over instead. */}
@@ -443,7 +501,7 @@ export default function GameBoardClient({
               Sua dica aparece para todos os jogadores desta rodada. Ela não
               pode revelar a palavra secreta.
             </p>
-            <div className="flex gap-2">
+            <div className="flex flex-col sm:flex-row gap-2">
               <input
                 type="text"
                 value={hintText}
@@ -454,13 +512,13 @@ export default function GameBoardClient({
                 placeholder="Ex: começa com a letra C"
                 disabled={isSendingHint}
                 maxLength={MAX_HINT_LENGTH}
-                className="input-base flex-1"
+                className="input-base flex-1 min-w-0"
               />
               <button
                 type="button"
                 onClick={handleSendHint}
                 disabled={isSendingHint || !hintText.trim()}
-                className="btn-primary shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="btn-primary w-full sm:w-auto sm:shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isSendingHint ? "..." : "Enviar"}
               </button>
@@ -507,6 +565,14 @@ export default function GameBoardClient({
           Palavra de: <span className="font-semibold">{currentRound.wordOwner.name || "Jogador"}</span>
         </p>
       )}
+
+      {/* Who's still guessing vs. already done this round — updates live
+          as other players submit attempts (any "game:update" realtime
+          event re-renders this component with a fresh gameState prop,
+          which this reads directly from — see getGameState's comment on
+          playersStatus for why this is safe to show, unlike a peer's
+          actual attempts). */}
+      <PlayersStatusList players={playersStatus} maxAttempts={maxAttempts} />
 
       {/* Wordle Grid */}
       <div className="flex justify-center">

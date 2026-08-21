@@ -11,7 +11,15 @@ import {
   normalizeWord,
   validateWordFormat,
   isValidWordLength,
+  MIN_WORD_LENGTH,
+  MAX_WORD_LENGTH,
 } from "@/lib/word-normalization";
+
+/** Every word length the game accepts — see MIN/MAX_WORD_LENGTH's comment. */
+const PLAYABLE_LENGTHS = Array.from(
+  { length: MAX_WORD_LENGTH - MIN_WORD_LENGTH + 1 },
+  (_, i) => MIN_WORD_LENGTH + i
+);
 
 /**
  * Get a word by its normalized form
@@ -143,9 +151,10 @@ export async function getRandomCommonWord(
  * Get words by length
  */
 export async function getWordsByLength(length: number, limit: number = 100) {
-  const validLengths = [4, 5, 6];
-  if (!validLengths.includes(length)) {
-    throw new Error(`Tamanho de palavra inválido: ${length}. Deve ser 4, 5 ou 6.`);
+  if (!PLAYABLE_LENGTHS.includes(length)) {
+    throw new Error(
+      `Tamanho de palavra inválido: ${length}. Deve ser entre ${MIN_WORD_LENGTH} e ${MAX_WORD_LENGTH}.`
+    );
   }
 
   return prisma.word.findMany({
@@ -189,7 +198,7 @@ export async function getDictionaryStats() {
     prisma.word.count(),
     prisma.word.count({ where: { isValid: true } }),
     prisma.word.count({ where: { isNegative: true } }),
-    Promise.all([4, 5, 6].map((len) =>
+    Promise.all(PLAYABLE_LENGTHS.map((len) =>
       prisma.word.count({ where: { length: len, isValid: true, isNegative: false } })
     )),
   ]);
@@ -198,11 +207,9 @@ export async function getDictionaryStats() {
     totalWords: total,
     validWords: valid,
     negativeWords: negative,
-    wordsByLength: {
-      4: byLength[0],
-      5: byLength[1],
-      6: byLength[2],
-    },
+    wordsByLength: Object.fromEntries(
+      PLAYABLE_LENGTHS.map((len, i) => [len, byLength[i]])
+    ) as Record<number, number>,
   };
 }
 
