@@ -1,7 +1,13 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { submitWord, startGame, leaveRoom, changeRoomWordLength } from "@/server/room-actions";
+import {
+  submitWord,
+  startGame,
+  leaveRoom,
+  changeRoomWordLength,
+  changeRoomVisibility,
+} from "@/server/room-actions";
 import {
   validateAnswerWordAction,
   getRandomWordSuggestionAction,
@@ -23,6 +29,7 @@ interface RoomInfo {
   participants: any[];
   wordSubmittedBy: string[];
   gameId: string | null;
+  isPublic: boolean;
 }
 
 export default function RoomLobbyClient({
@@ -73,6 +80,10 @@ export default function RoomLobbyClient({
   const [pendingWordLength, setPendingWordLength] = useState(room.wordLength);
   const [isChangingLength, setIsChangingLength] = useState(false);
   const [lengthError, setLengthError] = useState<string | null>(null);
+
+  // Host-only visibility toggle (see handleToggleVisibility below).
+  const [isChangingVisibility, setIsChangingVisibility] = useState(false);
+  const [visibilityError, setVisibilityError] = useState<string | null>(null);
 
   useEffect(() => {
     setPendingWordLength(room.wordLength);
@@ -195,6 +206,28 @@ export default function RoomLobbyClient({
       console.error(err);
     } finally {
       setIsChangingLength(false);
+    }
+  };
+
+  // Host-only: toggles whether the room shows up in other players'
+  // "Salas Públicas" browser (see changeRoomVisibility). Unlike the word
+  // length above, flipping this never invalidates anything already in the
+  // room, so it applies immediately on click — no separate confirm/apply
+  // step needed.
+  const handleToggleVisibility = async () => {
+    setIsChangingVisibility(true);
+    setVisibilityError(null);
+
+    try {
+      const result = await changeRoomVisibility(roomId, !room.isPublic);
+      if (!result.success) {
+        setVisibilityError(result.error || "Erro ao alterar a visibilidade da sala");
+      }
+    } catch (err) {
+      setVisibilityError("Erro ao alterar a visibilidade da sala");
+      console.error(err);
+    } finally {
+      setIsChangingVisibility(false);
     }
   };
 
@@ -415,6 +448,48 @@ export default function RoomLobbyClient({
                     >
                       {isChangingLength ? "Atualizando..." : "Atualizar Tamanho"}
                     </button>
+                  </div>
+
+                  {/* Visibility toggle — unlike word length above, this
+                      applies immediately on click (see
+                      handleToggleVisibility): flipping it never
+                      invalidates anything already submitted. */}
+                  <div className="mb-6 pb-6 border-b border-blue-200 dark:border-blue-800">
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-blue-800 dark:text-blue-300 mb-1">
+                          Sala Pública
+                        </p>
+                        <p className="text-xs text-blue-700 dark:text-blue-400">
+                          {room.isPublic
+                            ? "Visível no painel de qualquer jogador, sem precisar do código."
+                            : "Só quem tiver o código pode entrar."}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleToggleVisibility}
+                        disabled={isChangingVisibility}
+                        aria-pressed={room.isPublic}
+                        className={`shrink-0 px-4 py-2 rounded-lg font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                          room.isPublic
+                            ? "bg-blue-600 hover:bg-blue-700 text-white"
+                            : "bg-slate-200 dark:bg-slate-700 text-slate-900 dark:text-white"
+                        }`}
+                      >
+                        {isChangingVisibility
+                          ? "Alterando..."
+                          : room.isPublic
+                            ? "Pública"
+                            : "Privada"}
+                      </button>
+                    </div>
+
+                    {visibilityError && (
+                      <div className="mt-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-800 dark:text-red-300 px-4 py-3 rounded-lg text-sm">
+                        {visibilityError}
+                      </div>
+                    )}
                   </div>
 
                   {!allPlayersSubmitted ? (

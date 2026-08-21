@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { JoinRoomButton } from "@/components/join-room-button";
 import { getUserStatistics } from "@/server/ranking-actions";
-import { getActiveRoomForUser } from "@/server/room-actions";
+import { getActiveRoomForUser, getPublicRooms } from "@/server/room-actions";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { LeaveRoomButton } from "@/components/leave-room-button";
 
@@ -18,6 +18,13 @@ export default async function DashboardPage() {
     getUserStatistics(session.user.id),
     getActiveRoomForUser(),
   ]);
+
+  // Only fetched when there's somewhere for it to actually lead: a user
+  // already active in a room can't join another one (see the "Criar
+  // Sala"/"Entrar em Sala" cards' own one-room-at-a-time guard below), so
+  // browsing public rooms in that state would just be a dead end — skip
+  // the query entirely rather than fetch a list with nothing useful to do.
+  const publicRooms = activeRoom ? [] : await getPublicRooms();
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -178,6 +185,54 @@ export default async function DashboardPage() {
               </Link>
             </div>
           </div>
+
+          {/* Public Rooms — matchmaking-lite: rooms whose host opted into
+              "Sala Pública" (see room/create and the lobby's own toggle)
+              show up here for anyone to join without needing the code.
+              Hidden entirely (not shown empty) whenever the user already
+              has an active room — see publicRooms above — since joining
+              another one would be blocked server-side anyway. */}
+          {!activeRoom && publicRooms.length > 0 && (
+            <div className="card mb-12">
+              <h3 className="text-xl font-semibold mb-1">Salas Públicas</h3>
+              <p className="text-sm text-slate-600 dark:text-slate-400 mb-6">
+                Entre em uma sala aberta sem precisar de um código
+              </p>
+              <div className="space-y-3">
+                {publicRooms.map((room) => (
+                  <div
+                    key={room.code}
+                    className="flex items-center justify-between gap-4 p-3 bg-slate-50 dark:bg-slate-700/50 rounded-lg"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      {room.host.image && (
+                        <img
+                          src={room.host.image}
+                          alt=""
+                          className="w-8 h-8 rounded-full shrink-0"
+                        />
+                      )}
+                      <div className="min-w-0">
+                        <p className="font-semibold truncate">
+                          {room.host.name || "Anfitrião"}
+                        </p>
+                        <p className="text-xs text-slate-600 dark:text-slate-400">
+                          {room.wordLength} letras · {room.participantCount}/
+                          {room.maxPlayers} jogadores
+                        </p>
+                      </div>
+                    </div>
+                    <Link
+                      href={`/room/${room.code}`}
+                      className="btn-primary shrink-0 text-sm px-3 py-2"
+                    >
+                      Entrar
+                    </Link>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Quick Stats */}
           <div className="card">

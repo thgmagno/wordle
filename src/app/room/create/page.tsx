@@ -10,6 +10,7 @@ import Link from "next/link";
 export default function CreateRoomPage() {
   const router = useRouter();
   const [wordLength, setWordLength] = useState(5);
+  const [isPublic, setIsPublic] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Set only for the "already in another room" rejection — offers a
@@ -35,7 +36,7 @@ export default function CreateRoomPage() {
         return;
       }
 
-      const result = await createRoom(wordLength);
+      const result = await createRoom(wordLength, isPublic);
 
       if (result.success && result.roomId) {
         router.push(`/room/${result.roomId}`);
@@ -98,6 +99,39 @@ export default function CreateRoomPage() {
               <p className="text-xs text-slate-600 dark:text-slate-400 mt-3">
                 Escolha quantas letras terão as palavras nesta sala
               </p>
+            </div>
+
+            {/* Visibility — private (the existing, code-sharing-only
+                behavior) unless explicitly opted into. A public room can
+                still always be joined directly by code either way; this
+                only controls whether it also shows up, unprompted, in
+                other players' "Salas Públicas" browser on the dashboard. */}
+            <div className="mb-8 border border-slate-200 dark:border-slate-700 rounded-lg p-4">
+              <div className="flex items-center justify-between gap-4">
+                <div className="min-w-0">
+                  <h3 className="font-semibold text-slate-900 dark:text-white mb-1">
+                    Sala Pública
+                  </h3>
+                  <p className="text-xs text-slate-600 dark:text-slate-400">
+                    {isPublic
+                      ? "Qualquer jogador vai poder encontrar e entrar nesta sala pelo painel, sem precisar do código."
+                      : "Só quem tiver o código pode entrar. Você pode mudar isso depois, no lobby."}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsPublic((v) => !v)}
+                  disabled={isLoading}
+                  aria-pressed={isPublic}
+                  className={`shrink-0 px-4 py-2 rounded-lg font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                    isPublic
+                      ? "bg-blue-600 hover:bg-blue-700 text-white"
+                      : "bg-slate-200 dark:bg-slate-700 text-slate-900 dark:text-white"
+                  }`}
+                >
+                  {isPublic ? "Pública" : "Privada"}
+                </button>
+              </div>
             </div>
 
             {/* Create Button */}

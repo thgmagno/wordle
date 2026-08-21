@@ -136,6 +136,13 @@ model Room {
   // every caller just needs the id (to link to `/game/[id]` or to check
   // whether it's finished), never a populated Game object.
   currentGameId     String?            @db.ObjectId
+  // Whether this room is discoverable in the dashboard's public-rooms
+  // browser (getPublicRooms in room-actions.ts) instead of only joinable
+  // by whoever has its code. Defaults to false (private) — the existing,
+  // code-sharing-only behavior — so this is purely opt-in and changes
+  // nothing for a host who never touches the toggle. The host can flip it
+  // at creation or any time while still in LOBBY (changeRoomVisibility).
+  isPublic          Boolean            @default(false)
 
   // Relations
   host             User              @relation("RoomHost", fields: [hostId], references: [id], onDelete: Cascade)
@@ -146,6 +153,9 @@ model Room {
   @@index([status])
   @@index([hostId])
   @@index([createdAt])
+  // Backs the public-rooms browser's query: open, public rooms, newest
+  // first.
+  @@index([isPublic, status, createdAt])
 }
 
 enum RoomStatus {
