@@ -171,6 +171,16 @@ export const RATE_LIMIT_CONFIGS = {
     message: "Aguarde antes de enviar outra dica.",
   } as RateLimitConfig,
 
+  // Login como convidado ("Entrar sem conta") — cada login cria uma nova
+  // linha de usuário (não há credencial para reautenticar na mesma
+  // identidade), então isso também limita o quanto essa rota pode ser
+  // usada para inflar a tabela de usuários.
+  GUEST_LOGIN: {
+    windowMs: 15 * 60 * 1000, // 15 minutos
+    maxRequests: 10,
+    message: "Muitos logins como convidado. Tente novamente em alguns minutos.",
+  } as RateLimitConfig,
+
   // Requisições gerais de API
   API_REQUEST: {
     windowMs: 60 * 1000, // 1 minuto

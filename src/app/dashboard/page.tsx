@@ -21,8 +21,13 @@ export default async function DashboardPage() {
         <div className="container mx-auto px-4 py-4 flex justify-between items-center">
           <h1 className="text-2xl font-bold text-blue-600">Wordle</h1>
           <div className="flex gap-4 items-center">
-            <span className="text-sm text-slate-600 dark:text-slate-400">
+            <span className="text-sm text-slate-600 dark:text-slate-400 flex items-center gap-2">
               Bem-vindo, {session.user.name}!
+              {session.user.isGuest && (
+                <span className="text-xs font-semibold px-2 py-1 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
+                  Convidado
+                </span>
+              )}
             </span>
             <ThemeToggle />
             <Link href="/api/auth/signout" className="btn-secondary">

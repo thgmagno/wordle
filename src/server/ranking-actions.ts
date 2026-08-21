@@ -22,10 +22,16 @@ export async function getGlobalRanking(
     const skip = (page - 1) * limit;
 
     // Get total count
+    // `isGuest: false` is defense in depth on top of `showInLeaderboard`
+    // (guests always have that false too — see updateLeaderboardVisibility
+    // and the Credentials provider in src/lib/auth.ts) — a guest should
+    // never appear here even if some future bug ever let one end up with
+    // showInLeaderboard: true.
     const total = await prisma.userStatistics.count({
       where: {
         user: {
           showInLeaderboard: true,
+          isGuest: false,
         },
       },
     });
@@ -35,6 +41,7 @@ export async function getGlobalRanking(
       where: {
         user: {
           showInLeaderboard: true,
+          isGuest: false,
         },
       },
       include: {
@@ -251,6 +258,21 @@ export async function updateLeaderboardVisibility(
 
   if (!userId) {
     return { success: false, error: "Você precisa estar autenticado" };
+  }
+
+  // A guest ("Entrar sem conta") is never allowed into the global ranking
+  // — enforced again here, not just by defaulting showInLeaderboard to
+  // false at creation and hiding the toggle in the profile UI, so a
+  // forged call to this Server Action can't flip it on regardless of
+  // what the client sends.
+  if (session.user.isGuest) {
+    logger.warn(
+      "security",
+      "Guest attempted to change leaderboard visibility",
+      { userId },
+      userId
+    );
+    return { success: false, error: "Convidados não participam do ranking" };
   }
 
   try {

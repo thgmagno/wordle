@@ -18,6 +18,17 @@ model User {
   emailVerified     DateTime?
   image             String?
   showInLeaderboard Boolean   @default(true)
+  // A guest is a name-only identity created by the Credentials provider —
+  // "Entrar sem conta" (see src/lib/auth.ts) — for someone without (or
+  // unable to use) a Google account, e.g. a child whose account is under
+  // Family Link and can't complete Google sign-in on their own. Guests
+  // have no email/password and can't sign back into the SAME identity
+  // later; each guest login creates a fresh row. `showInLeaderboard` is
+  // force-set to false at creation and updateLeaderboardVisibility
+  // refuses to flip it for a guest — CLAUDE.md's ranking-privacy rules
+  // apply the same way here: a guest never appears in or is exposed
+  // through the global ranking.
+  isGuest           Boolean   @default(false)
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
