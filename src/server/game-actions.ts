@@ -14,6 +14,7 @@ import { logger } from "@/lib/logger";
 import { revalidatePath } from "next/cache";
 import { emitGameUpdate } from "@/lib/realtime";
 import { finalizeGameStatistics } from "@/server/ranking-actions";
+import { computeMatchPlacements } from "@/lib/match-ranking";
 
 /**
  * Selects one of the words submitted to a room and creates a Round for it.
@@ -580,30 +581,21 @@ export async function getGameState(gameId: string) {
       | undefined;
 
     if (fullGame.status === "FINISHED") {
-      const matchScores = await prisma.matchScore.findMany({ where: { gameId } });
-      const scoreByUserId = new Map(matchScores.map((s: any) => [s.userId, s.finalScore]));
+      const participantUserIds = fullGame.room.participants.map((p: any) => p.userId);
+      const placements = await computeMatchPlacements(gameId, participantUserIds);
+      const userById = new Map<
+        string,
+        { id: string; name: string | null; image: string | null }
+      >(fullGame.room.participants.map((p: any) => [p.userId, p.user]));
 
-      const ranked = fullGame.room.participants
-        .map((p: any) => ({
-          userId: p.userId,
-          user: p.user,
-          finalScore: scoreByUserId.get(p.userId) ?? 0,
-        }))
-        .sort((a: any, b: any) => b.finalScore - a.finalScore);
-
-      // Standard competition ranking: tied scores share a placement, and
-      // the next distinct score resumes at (index + 1), not the next
-      // integer — e.g. two players tied for 1st are both "1º", the next
-      // player is "3º".
-      let placement = 0;
-      let previousScore: number | null = null;
-      matchResults = ranked.map((entry: any, index: number) => {
-        if (previousScore === null || entry.finalScore !== previousScore) {
-          placement = index + 1;
-          previousScore = entry.finalScore;
-        }
-        return { ...entry, placement };
-      });
+      matchResults = placements.map((entry) => ({
+        ...entry,
+        user: userById.get(entry.userId) ?? {
+          id: entry.userId,
+          name: null,
+          image: null,
+        },
+      }));
     }
 
     return {

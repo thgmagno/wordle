@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
 import { logger } from "@/lib/logger";
+import { computeMatchPlacements } from "@/lib/match-ranking";
 import type { PaginatedResponse, UserStatistics } from "@/types";
 
 /**
@@ -27,6 +28,22 @@ export async function getGlobalRanking(
     // and the Credentials provider in src/lib/auth.ts) — a guest should
     // never appear here even if some future bug ever let one end up with
     // showInLeaderboard: true.
+    //
+    // IMPORTANT — this filter silently excludes any User document that
+    // predates the `isGuest` field's addition to the schema: Prisma's
+    // `@default(false)` only applies at document-create time, it never
+    // retroactively backfills existing MongoDB documents, and neither
+    // `isGuest: false` nor `isGuest: { not: true }`/`NOT: { isGuest: true }`
+    // match a document where the field is simply absent (verified — Prisma
+    // requires the field to literally be present and satisfy the
+    // comparison for this required-Boolean case on MongoDB, unlike a raw
+    // `$ne` query, which would match a missing field). That's real, and it
+    // silently dropped genuine pre-existing accounts from the entire
+    // ranking. The actual fix is a one-time data backfill —
+    // `npm run migrate:backfill-is-guest` (scripts/backfill-is-guest.js) —
+    // that explicitly sets `isGuest: false` on every User document missing
+    // it. Run that once per environment; this filter is correct for every
+    // document going forward without it.
     const total = await prisma.userStatistics.count({
       where: {
         user: {
@@ -112,14 +129,17 @@ export async function getUserRankingPosition(userId: string): Promise<number | n
       return null;
     }
 
-    // Must mirror getGlobalRanking's exact ordering — including its `id`
-    // tie-break — or a user tied with someone else on both totalPoints and
-    // averageScore could see a "Sua Posição" that doesn't match the row
-    // they actually appear on in that table.
+    // Must mirror getGlobalRanking's exact filter and ordering — including
+    // the `isGuest: false` filter (see that function's comment — and
+    // scripts/backfill-is-guest.js — for a real gap in what this can
+    // match) and the `id` tie-break — or a user could see a "Sua Posição"
+    // that doesn't match the row they actually appear on in that table, or
+    // a count that includes people the table itself would exclude.
     const position = await prisma.userStatistics.count({
       where: {
         user: {
           showInLeaderboard: true,
+          isGuest: false,
         },
         OR: [
           { totalPoints: { gt: userStats.totalPoints } },
@@ -297,29 +317,54 @@ export async function finalizeGameStatistics(
   gameId: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    // Get game and match scores
-    const matchScores = await prisma.matchScore.findMany({
-      where: { gameId },
-      include: {
-        user: true,
+    const game = await prisma.game.findUnique({
+      where: { id: gameId },
+      select: {
+        room: {
+          select: {
+            participants: {
+              where: { status: "ACTIVE" },
+              select: { userId: true },
+            },
+          },
+        },
       },
-      orderBy: { finalScore: "desc" },
     });
 
-    if (matchScores.length === 0) {
-      return { success: false, error: "Nenhuma pontuação encontrada para este jogo" };
+    if (!game) {
+      return { success: false, error: "Jogo não encontrado" };
     }
 
-    // Update user statistics
-    for (let i = 0; i < matchScores.length; i++) {
-      const score = matchScores[i];
-      const placement = i + 1;
+    const participantUserIds = game.room.participants.map((p: { userId: string }) => p.userId);
 
-      // Update placement
-      await prisma.matchScore.update({
-        where: { id: score.id },
-        data: { placement },
-      });
+    if (participantUserIds.length === 0) {
+      return { success: false, error: "Nenhum participante encontrado para este jogo" };
+    }
+
+    // Every participant, not just whoever has a MatchScore row — a
+    // player who never solved a single round still finished the match
+    // with 0 points and a real (last) placement, and used to be silently
+    // skipped here entirely: their totalGamesPlayed never incremented,
+    // and they'd never show up in the global ranking even after playing.
+    // Same tiebreak (who finished last-round soonest) as the player-
+    // facing "Placar Final" in getGameState, so a placement/win recorded
+    // here always agrees with what the player actually saw on screen.
+    const placements = await computeMatchPlacements(gameId, participantUserIds);
+
+    for (const entry of placements) {
+      const { userId, finalScore, placement } = entry;
+
+      // Only write a MatchScore.placement for players who actually have a
+      // MatchScore row (i.e. solved at least one round) — a 0-scorer has
+      // no row to update, and there's nothing meaningful to set anyway.
+      await prisma.matchScore
+        .update({
+          where: { gameId_userId: { gameId, userId } },
+          data: { placement },
+        })
+        .catch(() => {
+          // No MatchScore row for this user (0-scorer) — nothing to update.
+        });
 
       // Update user statistics. This must upsert, not conditionally update:
       // a player's UserStatistics row is otherwise only ever created lazily
@@ -328,18 +373,18 @@ export async function finalizeGameStatistics(
       // would have no row yet — a plain "update if exists" would silently
       // drop their very first match's result instead of recording it.
       const stats = await prisma.userStatistics.findUnique({
-        where: { userId: score.userId },
+        where: { userId },
       });
 
       const isWin = placement === 1 ? 1 : 0;
       const newTotal = (stats?.totalGamesPlayed ?? 0) + 1;
-      const newPoints = (stats?.totalPoints ?? 0) + score.finalScore;
+      const newPoints = (stats?.totalPoints ?? 0) + finalScore;
       const newWins = (stats?.totalWins ?? 0) + isWin;
       const newAverageScore = newPoints / newTotal;
-      const newBestScore = Math.max(stats?.bestScore ?? 0, score.finalScore);
+      const newBestScore = Math.max(stats?.bestScore ?? 0, finalScore);
 
       await prisma.userStatistics.upsert({
-        where: { userId: score.userId },
+        where: { userId },
         update: {
           totalGamesPlayed: newTotal,
           totalWins: newWins,
@@ -349,7 +394,7 @@ export async function finalizeGameStatistics(
           lastGamePlayedAt: new Date(),
         },
         create: {
-          userId: score.userId,
+          userId,
           totalGamesPlayed: newTotal,
           totalWins: newWins,
           totalPoints: newPoints,
@@ -364,14 +409,14 @@ export async function finalizeGameStatistics(
         "Estatísticas finalizadas para usuário",
         {
           gameId,
-          userId: score.userId,
+          userId,
           placement,
-          score: score.finalScore,
+          score: finalScore,
           totalGamesPlayed: newTotal,
           totalPoints: newPoints,
           totalWins: newWins,
         },
-        score.userId
+        userId
       );
     }
 
