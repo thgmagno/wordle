@@ -11,6 +11,7 @@ A production-ready multiplayer Wordle game in Brazilian Portuguese with real-tim
 - **Authentication**: Google OAuth integration for secure accounts
 - **Responsive Design**: Mobile-first interface with light/dark theme support
 - **Accessibility**: Keyboard support for both physical and virtual keyboards
+- **Progressive Web App**: Installable on desktop and mobile, with an offline fallback page
 - **Security**: Server-side validation for all game-critical operations
 - **Rate Limiting**: Built-in request rate limiting for API protection
 - **Structured Logging**: Category-based logging with multiple severity levels
@@ -140,6 +141,52 @@ unset and the app still runs fully — lobby/game data just only refreshes on
 navigation and Server Action responses instead of live, since
 `emitRoomUpdate`/`emitGameUpdate` and the client subscription hooks both no-op
 without credentials.
+
+### Progressive Web App
+
+The app is installable ("Adicionar à Tela de Início"/"Install app") on
+desktop and mobile, via:
+
+- `src/app/manifest.ts` — Next.js's App Router manifest file convention,
+  served automatically at `/manifest.webmanifest` and linked into every
+  page's `<head>` with no extra setup.
+- `src/app/icon.png` / `src/app/apple-icon.png` — Next's icon file
+  conventions (browser tab favicon and the iOS home-screen icon,
+  respectively), plus `public/icons/*` for the manifest's own icon sizes
+  (192px, 512px, and a 512px maskable variant with safe-zone padding for
+  Android's adaptive-icon masking). All four are generated from one source
+  design by `scripts/generate-pwa-icons.js` — rerun it
+  (`node scripts/generate-pwa-icons.js`, needs the `sharp` dependency
+  already in `package.json`) whenever the icon design changes; it's a
+  one-off generator, not something that runs as part of the build.
+- `public/sw.js` — a small service worker, registered in production only
+  (see `src/components/service-worker-register.tsx`) by
+  `src/app/layout.tsx`. Deliberately narrow in scope: this is a realtime
+  multiplayer game where the client is never a trusted source of truth for
+  room/game state (see "Security Considerations" below), so the service
+  worker only ever caches static, content-hashed build assets
+  (`_next/static/*`) and the app's own icons — every page navigation and
+  every Server Action call always goes straight to the network, exactly as
+  if the service worker didn't exist. Its one behavior beyond that is
+  serving `src/app/offline/page.tsx` in place of the browser's own error
+  screen when a page navigation fails with no connectivity at all.
+
+### Legacy accounts missing `isGuest`
+
+`User.isGuest` was added to the schema after this app already had real
+accounts in production, and Prisma's `@default(false)` only applies to
+documents created after that point — it never backfills existing MongoDB
+documents. Any account that predates the field has no `isGuest` field
+stored at all, which silently excluded it from the global ranking (see
+`src/server/ranking-actions.ts`'s `isGuest: false` filter). Run this once
+per environment after deploying that fix:
+
+```bash
+npm run migrate:backfill-is-guest
+```
+
+Idempotent — safe to run again; it only ever touches documents still
+missing the field.
 
 ## Project Structure
 
