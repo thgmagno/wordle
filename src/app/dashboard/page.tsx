@@ -5,6 +5,7 @@ import { JoinRoomButton } from "@/components/join-room-button";
 import { getUserStatistics } from "@/server/ranking-actions";
 import { getActiveRoomForUser } from "@/server/room-actions";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { LeaveRoomButton } from "@/components/leave-room-button";
 
 export default async function DashboardPage() {
   const session = await auth();
@@ -66,9 +67,21 @@ export default async function DashboardPage() {
                     {activeRoom.participantCount === 1 ? "jogador" : "jogadores"}
                   </p>
                 </div>
-                <Link href={`/room/${activeRoom.code}`} className="btn-primary shrink-0">
-                  Voltar para a Sala
-                </Link>
+                <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto shrink-0">
+                  <Link href={`/room/${activeRoom.code}`} className="btn-primary text-center">
+                    Voltar para a Sala
+                  </Link>
+                  {/* Escape hatch for a match that's stuck (a player left
+                      mid-round and nothing ever advances it — see
+                      LeaveRoomButton's own comment) — without this, the
+                      only way out was logging out and coming back as a
+                      different guest account. */}
+                  <LeaveRoomButton
+                    roomCode={activeRoom.code}
+                    confirmMessage="Deseja sair desta sala? Se a partida estiver em andamento, você não poderá voltar a ela."
+                    className="btn-secondary text-center"
+                  />
+                </div>
               </div>
             </div>
           )}
