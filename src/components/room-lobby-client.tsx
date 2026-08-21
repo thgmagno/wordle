@@ -1,13 +1,14 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { submitWord, startGame, leaveRoom } from "@/server/room-actions";
+import { submitWord, startGame, leaveRoom, changeRoomWordLength } from "@/server/room-actions";
 import {
   validateAnswerWordAction,
   getRandomWordSuggestionAction,
 } from "@/server/word-actions";
 import { useRoomRealtime } from "@/lib/use-realtime";
 import { RoomCodeShare } from "@/components/room-code-share";
+import { WordLengthSlider } from "@/components/word-length-slider";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -52,10 +53,30 @@ export default function RoomLobbyClient({
   const [success, setSuccess] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isShuffling, setIsShuffling] = useState(false);
-  const [hasSubmittedWord, setHasSubmittedWord] = useState(
-    room.wordSubmittedBy.includes(currentUserId)
-  );
   const isHost = room.hostId === currentUserId;
+
+  // Derived, not local state: this has to track `room.wordSubmittedBy`
+  // directly rather than being "set once on my own successful submit and
+  // never touched again," because it's not only ever set by MY action —
+  // the host changing the room's word length (see handleChangeWordLength)
+  // clears EVERY participant's submission, including one they'd already
+  // made. A local-only flag would keep showing "✓ Palavra Enviada" to a
+  // player whose submission the host just wiped, with no way for them to
+  // notice they need to send a new one.
+  const hasSubmittedWord = room.wordSubmittedBy.includes(currentUserId);
+
+  // Host-only word length control (see handleChangeWordLength). Local
+  // draft value for the slider, resynced from the room's real value
+  // whenever it changes — including a change this same host just made,
+  // once it round-trips back through fresh props — so the slider never
+  // drifts from what's actually saved.
+  const [pendingWordLength, setPendingWordLength] = useState(room.wordLength);
+  const [isChangingLength, setIsChangingLength] = useState(false);
+  const [lengthError, setLengthError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setPendingWordLength(room.wordLength);
+  }, [room.wordLength]);
 
   // "Sortear" button: fills the field with a random dictionary word so the
   // player can keep re-rolling until one feels right, instead of having to
@@ -105,7 +126,6 @@ export default function RoomLobbyClient({
       if (result.success) {
         setSuccess("Palavra enviada com sucesso!");
         setWord("");
-        setHasSubmittedWord(true);
       } else {
         setError(result.error || "Erro ao enviar palavra");
       }
@@ -134,6 +154,47 @@ export default function RoomLobbyClient({
       console.error(err);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // Host-only: changes the room's word length before the match starts.
+  // Anyone who already submitted a word (including the host) loses it —
+  // it was validated against the OLD length and can't be valid for the
+  // new one — so this always confirms first, but only mentions that cost
+  // when there's actually something to lose.
+  const handleChangeWordLength = async () => {
+    if (pendingWordLength === room.wordLength) {
+      return;
+    }
+
+    if (
+      room.wordSubmittedBy.length > 0 &&
+      !confirm(
+        "Alterar o tamanho da palavra vai apagar as palavras já enviadas. Cada participante precisará enviar novamente. Continuar?"
+      )
+    ) {
+      return;
+    }
+
+    setIsChangingLength(true);
+    setLengthError(null);
+
+    try {
+      const result = await changeRoomWordLength(roomId, pendingWordLength);
+
+      if (!result.success) {
+        setLengthError(result.error || "Erro ao alterar o tamanho da palavra");
+        // Snap the slider back to the room's real value — a failed change
+        // (e.g. the rate limit) shouldn't leave the control showing a
+        // value that was never actually saved.
+        setPendingWordLength(room.wordLength);
+      }
+    } catch (err) {
+      setLengthError("Erro ao alterar o tamanho da palavra");
+      setPendingWordLength(room.wordLength);
+      console.error(err);
+    } finally {
+      setIsChangingLength(false);
     }
   };
 
@@ -314,6 +375,47 @@ export default function RoomLobbyClient({
                   <h3 className="text-lg font-semibold mb-4 text-blue-800 dark:text-blue-300">
                     Controles do Anfitrião
                   </h3>
+
+                  {/* Word length can still be changed here, after the room
+                      already exists — creating a new room just to pick a
+                      different length used to be the only option. Changing
+                      it clears any words already submitted (see
+                      handleChangeWordLength), so this is deliberately not
+                      auto-saved on every drag — the host reviews the new
+                      value and confirms with a separate click. */}
+                  <div className="mb-6 pb-6 border-b border-blue-200 dark:border-blue-800">
+                    <p className="text-sm font-semibold text-blue-800 dark:text-blue-300 mb-3">
+                      Tamanho da Palavra
+                    </p>
+                    <WordLengthSlider
+                      value={pendingWordLength}
+                      onChange={setPendingWordLength}
+                      disabled={isChangingLength}
+                    />
+
+                    {lengthError && (
+                      <div className="mt-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-800 dark:text-red-300 px-4 py-3 rounded-lg text-sm">
+                        {lengthError}
+                      </div>
+                    )}
+
+                    {room.wordSubmittedBy.length > 0 && pendingWordLength !== room.wordLength && (
+                      <p className="text-xs text-orange-700 dark:text-orange-400 mt-3">
+                        ⚠️ Isso vai apagar as {room.wordSubmittedBy.length}{" "}
+                        {room.wordSubmittedBy.length === 1 ? "palavra já enviada" : "palavras já enviadas"} — cada
+                        participante precisará enviar novamente.
+                      </p>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={handleChangeWordLength}
+                      disabled={isChangingLength || pendingWordLength === room.wordLength}
+                      className="w-full sm:w-auto mt-3 btn-secondary disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {isChangingLength ? "Atualizando..." : "Atualizar Tamanho"}
+                    </button>
+                  </div>
 
                   {!allPlayersSubmitted ? (
                     <p className="text-sm text-blue-700 dark:text-blue-400 mb-4">

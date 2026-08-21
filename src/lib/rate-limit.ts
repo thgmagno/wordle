@@ -171,6 +171,17 @@ export const RATE_LIMIT_CONFIGS = {
     message: "Aguarde antes de enviar outra dica.",
   } as RateLimitConfig,
 
+  // Anfitrião alterando o tamanho da palavra de uma sala já criada, ainda
+  // no lobby. Menos generoso que outras ações de sala porque cada
+  // alteração apaga as palavras já enviadas por todo mundo — não é algo
+  // que faça sentido clicar repetidamente, ao contrário do sorteio de
+  // palavra ou de reiniciar a sala para outra partida.
+  CHANGE_ROOM_WORD_LENGTH: {
+    windowMs: 5 * 60 * 1000, // 5 minutos
+    maxRequests: 10,
+    message: "Muitas alterações de tamanho de palavra. Aguarde um pouco.",
+  } as RateLimitConfig,
+
   // Anfitrião reiniciando a mesma sala para outra partida ("Jogar
   // Novamente"), em vez de precisar criar uma sala nova e reenviar o
   // código. Generoso o bastante para um grupo jogar várias partidas
