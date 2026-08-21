@@ -27,13 +27,10 @@ const DICTIONARY_SOURCES = {
 };
 
 const ORIGIN = "fserb-pt-br";
-// The game itself only plays 4/5/6-letter rounds (see
-// src/lib/word-normalization.ts's isValidWordLength, which is what
-// actually gates room creation and answer/attempt validation) — that's
-// deliberately untouched. This range is just what the IMPORT stores: as
-// much of the source lexicon as exists, up to 10 letters, so longer words
-// are already sitting in the dictionary, ready for whenever a game mode
-// wants them, instead of being silently discarded at import time.
+// Matches the gameplay range in src/lib/word-normalization.ts
+// (MIN_WORD_LENGTH/MAX_WORD_LENGTH, which is what actually gates room
+// creation and answer/attempt validation) — every length imported here is
+// playable. Keep the two in sync if either changes.
 const MIN_LENGTH = 4;
 const MAX_LENGTH = 10;
 const BATCH_SIZE = 1000;
@@ -118,7 +115,7 @@ function parseIcf(content) {
 }
 
 /**
- * Seleciona os candidatos de 4-6 letras, deduplicados por forma normalizada.
+ * Seleciona os candidatos de MIN_LENGTH-MAX_LENGTH letras, deduplicados por forma normalizada.
  * Em colisão (ex.: "saia" vs "saía") vence a palavra mais frequente no corpus.
  */
 function buildCandidates(lexicoLines, icfScores, negativeSet) {
